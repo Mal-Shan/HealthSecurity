@@ -1,0 +1,537 @@
+---
+title: "Health Care Security Attacks"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: 
+      bg: "#FFFFFF"
+      fg: "#000000"
+      primary: "#a10303"
+      base_font:
+        google: "Niramit"
+      code_font:
+        google: "Source Code Pro"
+    source_code: embed
+runtime: shiny
+
+
+---
+
+```{r setup, include=FALSE}
+# Libraries
+library(flexdashboard)
+library(shinyWidgets)
+library(shiny)
+library(tidyverse)
+library(DT)
+library(reader)
+library(rsconnect)
+library(dplyr)
+library(leaflet)
+library(tigris)
+library(sf)
+library(censusapi)
+library(tidycensus)
+library(lubridate)
+library(reactable)
+```
+
+
+```{r global, include = FALSE}
+#Loading Pre-Wrangled Data Frames
+all_health_breaches <- read_csv("https://raw.githubusercontent.com/Mal-Shan/CyberHealthData/main/all_health_breaches.csv")
+
+attack_location <- read_csv("https://raw.githubusercontent.com/Mal-Shan/CyberHealthData/main/attack_location.csv")
+
+attack_incident <- read_csv("https://raw.githubusercontent.com/Mal-Shan/CyberHealthData/main/attack_incident.csv")
+
+#Creating states chloropleth dataframe
+states <- states()
+
+states <- states %>%
+  sf::st_transform('+proj=longlat +datum=WGS84')
+
+total_state_incidents <-  all_health_breaches %>%
+  group_by(state) %>%
+  summarize(total_affected = sum(affected))
+
+api_key <- "7fafa1056e554ba1b132c71721d21d15a938f866"
+
+options(tigris_use_cache = TRUE)
+
+state_pop <-  getCensus(name="acs/acs5", 
+                        vintage=2020, #was set to 2015 before 
+                        key=api_key, 
+                        vars=c("NAME", "B01003_001E"), 
+                        region="state:*")
+
+colnames(state_pop) <- c("state_id", "NAME", "population")
+state_pop$state_id <- as.numeric(state_pop$state_id)
+
+state_off <- data.frame(state.abb, state.name)
+colnames(state_off) <- c("state", "NAME")
+
+state_pop <- left_join(state_pop, state_off)
+state_pop$state <- ifelse(state_pop$NAME=="District of Columbia", "DC", as.character(state_pop$state))
+state_pop$state <- ifelse(state_pop$NAME=="Puerto Rico", "PR", as.character(state_pop$state))
+
+cyber_state_pop <- left_join(total_state_incidents, state_pop)
+
+cyber_state_pop$per_capita <- round(cyber_state_pop$total_affected/cyber_state_pop$population*100000,2) #per 100,000
+
+cyber_state_pop <- filter(cyber_state_pop, !is.na(per_capita))
+
+states_merged_cyber_pc <- geo_join(states, cyber_state_pop, "STUSPS", "state")
+
+pal_cyber <- colorNumeric("Reds", domain=states_merged_cyber_pc$per_capita)
+
+states_merged_cyber_pc <- subset(states_merged_cyber_pc, !is.na(per_capita))
+
+popup_cyber <- paste("<b>", states_merged_cyber_pc$NAME.x, 
+                   "</b><br />Total: ", states_merged_cyber_pc$total,
+                   "<br />Per capita: ", 
+                   as.character(states_merged_cyber_pc$per_capita))
+
+#counts for entity 
+counts_entity <- all_health_breaches %>%
+  count(entity) %>%
+  rename(Attacks = n)
+
+#Attack Type Dataframe
+attack_type <- all_health_breaches %>%
+  drop_na() %>%
+  group_by(type) %>%
+  summarize(total_affected = sum(affected))
+
+attack_type2 <- all_health_breaches %>%
+  drop_na() %>%
+  group_by(type) %>%
+  count(type) %>%
+  rename(num = n)
+
+attack_type3 <- full_join(attack_type, attack_type2, by = c("type" = "type"))
+
+attack_type3 <- attack_type3 %>%
+  add_column(choice = "Target Entity") %>%
+  rename(Category = type)
+
+#Attack Location Dataframe
+attack_location1 <- attack_location %>%
+  drop_na() %>%
+  group_by(location) %>%
+  summarize(total_affected = sum(affected))
+
+attack_location2 <- attack_location %>%
+  drop_na() %>%
+  group_by(location) %>%
+  count(location) %>%
+  rename(num = n)
+
+attack_location3 <- full_join(attack_location1, attack_location2, 
+                          by = c("location" = "location"))
+
+attack_location3 <- attack_location3 %>%
+  add_column(choice = "Digital Location") %>%
+  rename(Category = location)
+
+#Attack Incident Dataframe
+attack_incident1 <- attack_incident %>%
+  drop_na() %>%
+  group_by(incident) %>%
+  summarize(total_affected = sum(affected))
+
+attack_incident2 <- attack_incident %>%
+  drop_na() %>%
+  group_by(incident) %>%
+  count(incident) %>%
+  rename(num = n)
+
+attack_incident3 <- full_join(attack_incident1, attack_incident2, 
+                          by = c("incident" = "incident"))
+
+attack_incident3 <- attack_incident3 %>%
+  add_column(choice = "Hacking Incident Type") %>%
+  rename(Category = incident)
+
+combined_attacks <- rbind(attack_type3, attack_location3)
+combined_attacks <- rbind(combined_attacks, attack_incident3)
+
+#date of attacks
+total_year_affected <- all_health_breaches %>%
+  select(date, affected) %>%
+  mutate(date= mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(year = year(date)) %>%
+  group_by(year) %>%
+  drop_na() %>%
+  summarize(total_affected = sum(affected))
+
+total_year_attacks <- all_health_breaches %>%
+  mutate(date = mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(year = year(date)) %>%
+  add_count(entity) %>%
+  select(year, n) %>%
+  group_by(year) %>%
+  drop_na() %>%
+  summarize(total_attacks = sum(n))
+
+total_year <- full_join(total_year_attacks, total_year_affected, 
+                          by = c("year" = "year"))
+  
+#frequency of attacks
+  freq_attacks <- all_health_breaches %>%
+    add_count(entity) %>%
+    rename(total_attacks_per_entity = n) %>%
+    arrange(desc(total_attacks_per_entity)) %>%
+    select(-business_associate)
+
+
+```
+
+
+Map of Attacks
+=====================================  
+
+
+Column {data-width=400}
+-------------------------------------
+
+#### About
+
+This data dashboard seeks to explore cybersecurity attacks on healthcare entities in order to raise awareness about the vulnerability of personal health information (PHI) to hacking by malicious actors. Although healthcare organizations had experienced 1,426 attacks per week in 2022 ([Checkpoint, 2023](https://www.checkpoint.com/cyber-hub/cyber-security/what-is-healthcare-cyber-security/cyberattacks-on-the-healthcare-sector/)), many patients are unaware of the large scale threat of their information and data, with many hospital systems and healthcare organizations being slow in their implementation of security practices and notification of such vulnerabilities. The data used in this dashboard was collected by [US Department of Health and Human Services for Civil Rights](https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf), which includes data on attacks as recent as March 22nd, 2023, demonstrating how prevalent and ongoing these issues are. 
+
+Through the following features in this interactive dashboard, you can: 
+
+#### Map of Attacks
+
+* click a state to reveal a popup with information about the total number and per capita amount of individuals from each state affected by CyberSecurity attacks since 2009
+* click to grab and drag the map around
+* zoom with the '+' and '--' buttons (top-left) or with your mouse's scroll wheel
+
+#### Types of Attacks 
+
+* explore the different types of hacking incidents, target entities, digital locations of attacks via bar graphs and data tables 
+* compare these values based on the number of attacks that occurred under these types of attacks and the total number of individuals affected by such attacks 
+
+#### Attacks Over Time
+
+* explore the change in the number of individuals affected by attacks from 2009 to 2023
+
+#### Affected Entities
+
+* see how many times a given organization has been attacked, how many people those attacks affected, and when such attacks happened 
+
+
+Column {data-width=600}
+-------------------------------------
+    
+### Interactive map
+    
+```{r map}
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addPolygons(data = states_merged_cyber_pc, 
+              fillColor = ~pal_cyber(states_merged_cyber_pc$per_capita), 
+              fillOpacity = 0.9, 
+              weight = 0.2, 
+              smoothFactor = 0.2, 
+              popup = ~popup_cyber) %>%
+  addLegend(pal = pal_cyber, 
+            values = states_merged_cyber_pc$per_capita, 
+            position = "bottomright", 
+            title = "Cyber Attacks<br />per 100,000<br/>residents")
+
+
+
+```
+
+
+Types of Attacks 
+=====================================  
+
+Inputs {.sidebar}
+-------------------------------------
+
+```{r}
+# From shinyWidgets
+
+selectInput("select_choice", 
+            label = h6("What do you want to know about the attacks?"), 
+    choices = list("Hacking Incident Type" = "Hacking Incident Type", 
+                   "Target Entity" = "Target Entity", 
+                   "Digital Location" = "Digital Location"), 
+    selected = 1)
+
+radioButtons(inputId = "variable_interest", label = h6("Variable of Interest"),
+             choices = c("Total Number of Attacks" = "num",
+                         "Total Number of Individuals Affected" = "total_affected"),
+             selected = NULL)
+      
+```
+
+Column {.tabset .tabset-fade}
+-------------------------------------
+
+### Bar Graph
+    
+```{r}
+  dat_type <- reactive({
+    combined_attacks %>%
+      filter(choice == input$select_choice) %>%
+      mutate(Total = .data[[input$variable_interest]]) 
+  })
+  
+renderPlot({
+    ggplot(data = dat_type(), 
+           mapping = aes(x = fct_rev(fct_reorder(Category,desc(Total))), 
+                         y = Total)) +
+    geom_col(fill = "firebrick") +
+    theme_classic() + 
+    coord_flip() +
+    labs(y = " ", x = " ") +
+    theme(axis.text = element_text(size = 15),
+          axis.text.x = element_text(face = "bold"),
+          axis.text.y = element_text(face = "bold"))
+    
+  })
+```
+
+### Data Table
+    
+```{r}
+dat_type_agg <- reactive({ 
+    dat_type() %>%
+    select(Category, Total) %>%
+    arrange(desc(Total))
+  })
+  
+renderDT({
+    datatable(dat_type_agg(),
+              options = list(paging = FALSE,
+                             searching = FALSE,
+                             orderClasses = TRUE))
+  })
+```
+
+
+Attacks Over Time
+=====================================  
+
+Inputs {.sidebar}
+-------------------------------------
+
+```{r}
+
+radioButtons(inputId = "variable_interest2", label = h6("Variable of Interest"),
+             choices = c("Total Number of Attacks" = "total_attacks",
+                         "Total Number of Individuals Affected" = "total_affected"),
+             selected = NULL)
+
+sliderInput("year_range", label = h6("Select a Range of Years"),
+                  min = min(total_year$year), 
+                  max = max(total_year$year),
+                  value = c(2010,2015),
+                  sep = "")
+
+```
+
+
+Column {.tabset}
+-------------------------------------
+
+### Line Graph
+
+```{r}
+
+dates_attacks <- reactive({
+    total_year  %>%
+    filter(year >= input$year_range[1], year <= input$year_range[2]) %>%
+    mutate(Total2 = .data[[input$variable_interest2]]) 
+  })
+  
+renderPlot({
+    ggplot(data = dates_attacks(), 
+           mapping = aes(x = year, 
+                         y = Total2)) +
+    geom_line(color = "darkred") +
+    theme_classic() + 
+    labs(y = " ", x = " ") +
+    theme(axis.text = element_text(size = 15),
+          axis.text.x = element_text(face = "bold"),
+          axis.text.y = element_text(face = "bold"))
+  })
+
+```
+
+### Bar Graph
+    
+```{r}
+
+dates_attacks <- reactive({
+    total_year  %>%
+    filter(year >= input$year_range[1], year <= input$year_range[2]) %>%
+    mutate(Total2 = .data[[input$variable_interest2]]) 
+  })
+  
+renderPlot({
+    ggplot(data = dates_attacks(), 
+           mapping = aes(x = year, 
+                         y = Total2)) +
+    geom_col(fill = "darkred") +
+    theme_classic() + 
+    labs(y = " ", x = " ") +
+    theme(axis.text = element_text(size = 15),
+          axis.text.x = element_text(face = "bold"),
+          axis.text.y = element_text(face = "bold"))
+  })
+
+```
+
+
+
+View Attack History
+===================================== 
+
+Inputs {.sidebar}
+-------------------------------------
+
+```{r}
+# From shinyWidgets
+
+pickerInput("select_State", label = h6("Filter Geographical Location of Attacks"), 
+    choices = list("Alabama" = "AL",
+                   "Alaska" = "AK",
+                   "Arizona" = "AZ",
+                   "Arkansas" = "AR",
+                   "California" = "CA",
+                   "Colorado" = "CO",
+                   "Connecticut" = "CT",
+                   "Delaware" = "DE",
+                   "District of Columbia" = "DC",
+                   "Florida" = "FL",
+                   "Georgia" = "GA",
+                   "Hawaii" = "HI",
+                   "Idaho" = "ID",
+                   "Illinois" = "IL",
+                   "Indiana" = "IN",
+                   "Iowa" = "IA",
+                   "Kansas" = "KS",
+                   "Kentucky" = "KY",
+                   "Louisiana" = "LA",
+                   "Maine" = "ME",
+                   "Maryland" = "MD",
+                   "Massachusetts" = "MA",
+                   "Michigan" = "MI",
+                   "Minnesota" = "MN",
+                   "Mississippi" = "MS",
+                   "Missouri" = "MO",
+                   "Montana" = "MT",
+                   "Nebraska" = "NE",
+                   "Nevada" = "NV",
+                   "New Hampshire" = "NH",
+                   "New Jersey" = "NJ",
+                   "New Mexico" = "NM",
+                   "New York" = "NY",
+                   "North Carolina" = "NC",
+                   "North Dakota" = "ND",
+                   "Ohio" = "OH",
+                   "Oklahoma" = "OK",
+                   "Oregon" = "OR",
+                   "Pennsylvania" = "PA",
+                   "Puerto Rico" = "PR",
+                   "Rhode Island" = "RI",
+                   "South Carolina" = "SC",
+                   "South Dakota" = "SD",
+                   "Tennessee" = "TN",
+                   "Texas" = "TX",
+                   "Utah" = "UT",
+                   "Vermont" = "VT",
+                   "Virginia" = "VA",
+                   "Washington" = "WA",
+                   "West Virginia" = "WV",
+                   "Wisconsin" = "WI",
+                   "Wyoming" = "WY"), 
+    selected = "TX", 
+    multiple = TRUE, options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
+
+
+pickerInput("select_Location", label = h6("Filter Digital Location of Attacks"), 
+    choices = list("Desktop Computer" = "Desktop Computer", 
+                   "Electronic Medical Record" = "Electronic Medical Record", 
+                   "Email" = "Email",
+                   "Laptop" = "Laptop",
+                   "Network Server" = "Network Server",
+                   "Other Electronic Device" = "Other Portable Electronic Device",
+                   "Other" = "Other"), multiple = TRUE, selected = "Desktop Computer", options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
+
+
+pickerInput("select_Type", label = h6("Filter Target Entity Type"), 
+    choices = list("Healthcare Provider" = "Healthcare Provider", 
+                   "Health Plan" = "Health Plan", 
+                   "Business Associate" = "Business Associate",
+                   "Healthcare Clearing House" = "Healthcare Clearing House"), multiple = TRUE, selected = "Healthcare Provider", options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
+
+pickerInput("select_Incident", label = h6("Filter Hacking Incident Type"), 
+    choices = list("Hacking/IT Incident" = "Hacking/IT Incident", 
+                   "Improper Disposal" = "Improper Disposal", 
+                   "Loss" = "Loss",
+                   "Other" = "Other",
+                   "Theft" = "Theft",
+                   "Unauthorized Access" = "Unauthorized Access/Disclosure", "Unknown" = "Unknown"), multiple = TRUE, selected = "Unauthorized Access/Disclosure", options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
+
+
+
+fluidRow(
+    align = "left",
+    br(),
+    column(
+      12,
+      splitLayout(cellWidths = c("60%", "60%"),
+                  actionButton(
+                    inputId = "apply",
+                    label = "Apply Changes",
+                    style = "width:125px"
+                  ),
+                  actionButton(
+                    inputId = "revert",
+                    label = "Revert",
+                    style = "width:80px"
+                  )
+      )
+    )
+  ) # fluidRow
+      
+```
+
+Column {.tabset}
+-------------------------------------
+
+### History of Attacks
+    
+```{r}
+
+  filteredData <- reactiveVal(freq_attacks)
+  
+  observeEvent(input$apply, {
+    filteredData(
+      freq_attacks %>% 
+        filter(state %in% input$select_State, 
+               type %in% input$select_Type, 
+               incident %in% input$select_Incident,
+               location %in% input$select_Location)
+    )
+      
+  })
+  
+  observeEvent(input$revert, {
+    filteredData(
+      freq_attacks
+    )
+      
+  })
+
+  renderDataTable(datatable(filteredData()))
+```
+
+

@@ -1,0 +1,109 @@
+---
+title: "Looking at Frequency of Attacks Based on Dates"
+output: html_document
+date: "2023-03-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading Appropriate Data Frames & Cleaning Datasets
+
+```{r}
+#load necessary libraries
+library(tidyverse)
+library(readr)
+
+#load necessary report
+date_attacks <- all_health_breaches %>%
+  select(date, affected) 
+
+```
+
+## Changing Dates in Dataframe
+
+```{r states}
+library(lubridate)
+
+date_attacks <- date_attacks %>%
+  mutate(date= mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(year = year(date)) %>%
+  mutate(day = day(date)) %>%
+  mutate(month = month(date))
+
+date_attacks
+```
+
+## Exploring Data #1: Months
+
+```{r states}
+
+ggplot(data = date_attacks, 
+       mapping = aes(y = affected, x = month(date, label = TRUE))) +
+  geom_col()
+  
+```
+
+## Exploring Data #2: Days
+
+```{r states}
+
+ggplot(data = date_attacks, 
+       mapping = aes(y = affected, x = wday(date, label = TRUE))) +
+  geom_col()
+  
+```
+
+## Exploring Data #3: Years
+
+```{r states}
+total_year <- all_health_breaches %>%
+  select(date, affected) %>%
+  mutate(date= mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(year = year(date)) %>%
+  mutate(day = wday(date)) %>%
+  mutate(month = month(date)) %>%
+  group_by(year) %>%
+  drop_na() %>%
+  summarize(total_affected = sum(affected))
+
+
+ggplot(data = total_year, 
+       mapping = aes(y = total_affected, x = year)) +
+  geom_line()
+
+total_month <- all_health_breaches %>%
+  select(date, affected) %>%
+  mutate(date= mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(year = year(date)) %>%
+  mutate(day = wday(date, label = TRUE)) %>%
+  mutate(month = month(date, label = TRUE)) %>%
+  group_by(month) %>%
+  drop_na() %>%
+  summarize(total_affected = sum(affected))
+
+ggplot(data = total_month, 
+       mapping = aes(y = total_affected, x = month, group=1)) +
+  geom_line()
+
+
+total_day <- all_health_breaches %>%
+  select(date, affected) %>%
+  mutate(date= mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(year = year(date)) %>%
+  mutate(day = wday(date, label = TRUE)) %>%
+  mutate(month = month(date, label = TRUE)) %>%
+  group_by(day) %>%
+  drop_na() %>%
+  summarize(total_affected = sum(affected))
+
+ggplot(data = total_day, 
+       mapping = aes(y = total_affected, x = day, group=1)) +
+  geom_line()
+  
+```
