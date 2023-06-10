@@ -228,9 +228,12 @@ Column {data-width=600}
 ### Interactive map
     
 ```{r map}
-leaflet() %>%
+
+leaflet(options = leafletOptions(minZoom = 4)) %>%
   addProviderTiles(providers$CartoDB.Positron) %>%
   setView(-98.483330, 38.712046, zoom = 4) %>% 
+  setMaxBounds(lng1 = -178.2, lat1 = 6.6,
+               lng2 = -49.0, lat2 = 83.3) %>%
   addPolygons(data = states_merged_cyber_pc, 
               fillColor = ~pal_cyber(states_merged_cyber_pc$per_capita), 
               fillOpacity = 0.9, 
