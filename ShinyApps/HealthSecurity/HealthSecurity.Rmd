@@ -204,13 +204,14 @@ Column {data-width=400}
 
 This data dashboard seeks to explore cybersecurity attacks on healthcare entities in order to raise awareness about the vulnerability of personal health information (PHI) to hacking by malicious actors. Although healthcare organizations had experienced 1,426 attacks per week in 2022 ([Checkpoint, 2023](https://www.checkpoint.com/cyber-hub/cyber-security/what-is-healthcare-cyber-security/cyberattacks-on-the-healthcare-sector/)), many patients are unaware of the large scale threat of their information and data, with many hospital systems and healthcare organizations being slow in their implementation of security practices and notification of such vulnerabilities. The data used in this dashboard was collected by [US Department of Health and Human Services for Civil Rights](https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf), which includes data on attacks as recent as March 22nd, 2023, demonstrating how prevalent and ongoing these issues are. 
 
-Through the following features in this interactive dashboard, you can: 
+Through the following features in this interactive dashboard, you can explore: 
 
 #### Map of Attacks
 
 * click a state to reveal a popup with information about the total number and per capita amount of individuals from each state affected by CyberSecurity attacks since 2009
 * click to grab and drag the map around
 * zoom with the '+' and '--' buttons (top-left) or with your mouse's scroll wheel
+* Note: sometimes the map lags. If this occurs, reloading the page will allow for the map to be reloaded. 
 
 #### Types of Attacks 
 
@@ -219,11 +220,11 @@ Through the following features in this interactive dashboard, you can:
 
 #### Attacks Over Time
 
-* explore the change in the number of individuals affected by attacks from 2009 to 2023
+* explore the change in the number of attacks and individuals affected by attacks from 2009 to 2023
 
-#### Affected Entities
+#### View Attack History
 
-* see how many times a given organization has been attacked, how many people those attacks affected, and when such attacks happened 
+* explore dataset in detail and with more options to filter dataset by physical and digital location, types of target entities, hacking incident types, and a total count of how many times that particular entity was attacked since 2009. 
 
 
 Column {data-width=600}
@@ -315,6 +316,10 @@ selectInput(inputId = "filter_State", label = h6("Filter Geographical Location o
                    "Wisconsin" = "WI",
                    "Wyoming" = "WY"), 
     selected = 1)
+
+strong("Important Note:")
+
+p("The dip that we see in 2023 is not necessarily because there are less attacks this year, but only because the year has just started and so we do not know how many attacks will occur in the future. It is still concerning that there are already a reported 6,424,249 individuals that had their healthcare data breached across 104 attacks in just 3 months")
 
 
 ```
@@ -542,6 +547,12 @@ fluidRow(
       )
     )
   ) # fluidRow
+
+p(" ")
+
+strong("Important Note:")
+
+p("The US Secretary of HHS is only required to report attacks in which 500 or more individuals were affected and so there may be underreporting present in this dataset")
       
 ```
 
