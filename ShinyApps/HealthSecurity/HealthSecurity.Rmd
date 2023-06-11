@@ -156,28 +156,31 @@ attack_incident3 <- attack_incident3 %>%
 combined_attacks <- rbind(attack_type3, attack_location3)
 combined_attacks <- rbind(combined_attacks, attack_incident3)
 
-#date of attacks
-total_year_affected <- all_health_breaches %>%
-  select(date, affected) %>%
-  mutate(date= mdy(date)) %>%
-  mutate(date = ymd(paste(date, sep = " ")))  %>%
-  mutate(year = year(date)) %>%
-  group_by(year) %>%
-  drop_na() %>%
-  summarize(total_affected = sum(affected))
+#date of attacks (year)
 
 total_year_attacks <- all_health_breaches %>%
   mutate(date = mdy(date)) %>%
   mutate(date = ymd(paste(date, sep = " ")))  %>%
   mutate(year = year(date)) %>%
   add_count(entity) %>%
-  select(year, n) %>%
-  group_by(year) %>%
+  select(state, year, n) %>%
+  group_by(state, year) %>%
   drop_na() %>%
   summarize(total_attacks = sum(n))
 
-total_year <- full_join(total_year_attacks, total_year_affected, 
-                          by = c("year" = "year"))
+
+#date of attacks (month)
+
+total_month_attacks <- all_health_breaches %>%
+  mutate(date = mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(month = month(date)) %>%
+  add_count(entity) %>%
+  select(state, month, n) %>%
+  group_by(state, month) %>%
+  drop_na() %>%
+  summarize(total_attacks = sum(n))
+
   
 #frequency of attacks
   freq_attacks <- all_health_breaches %>%
@@ -327,16 +330,62 @@ Inputs {.sidebar}
 
 ```{r}
 
-radioButtons(inputId = "variable_interest2", label = h6("Variable of Interest"),
-             choices = c("Total Number of Attacks" = "total_attacks",
-                         "Total Number of Individuals Affected" = "total_affected"),
-             selected = NULL)
+selectInput(inputId = "filter_State", label = h6("Filter Geographical Location of Attacks"), 
+    choices = list("All States" = "All", 
+                   "Alabama" = "AL",
+                   "Alaska" = "AK",
+                   "Arizona" = "AZ",
+                   "Arkansas" = "AR",
+                   "California" = "CA",
+                   "Colorado" = "CO",
+                   "Connecticut" = "CT",
+                   "Delaware" = "DE",
+                   "District of Columbia" = "DC",
+                   "Florida" = "FL",
+                   "Georgia" = "GA",
+                   "Hawaii" = "HI",
+                   "Idaho" = "ID",
+                   "Illinois" = "IL",
+                   "Indiana" = "IN",
+                   "Iowa" = "IA",
+                   "Kansas" = "KS",
+                   "Kentucky" = "KY",
+                   "Louisiana" = "LA",
+                   "Maine" = "ME",
+                   "Maryland" = "MD",
+                   "Massachusetts" = "MA",
+                   "Michigan" = "MI",
+                   "Minnesota" = "MN",
+                   "Mississippi" = "MS",
+                   "Missouri" = "MO",
+                   "Montana" = "MT",
+                   "Nebraska" = "NE",
+                   "Nevada" = "NV",
+                   "New Hampshire" = "NH",
+                   "New Jersey" = "NJ",
+                   "New Mexico" = "NM",
+                   "New York" = "NY",
+                   "North Carolina" = "NC",
+                   "North Dakota" = "ND",
+                   "Ohio" = "OH",
+                   "Oklahoma" = "OK",
+                   "Oregon" = "OR",
+                   "Pennsylvania" = "PA",
+                   "Puerto Rico" = "PR",
+                   "Rhode Island" = "RI",
+                   "South Carolina" = "SC",
+                   "South Dakota" = "SD",
+                   "Tennessee" = "TN",
+                   "Texas" = "TX",
+                   "Utah" = "UT",
+                   "Vermont" = "VT",
+                   "Virginia" = "VA",
+                   "Washington" = "WA",
+                   "West Virginia" = "WV",
+                   "Wisconsin" = "WI",
+                   "Wyoming" = "WY"), 
+    selected = 1)
 
-sliderInput("year_range", label = h6("Select a Range of Years"),
-                  min = min(total_year$year), 
-                  max = max(total_year$year),
-                  value = c(2010,2015),
-                  sep = "")
 
 ```
 
@@ -349,49 +398,37 @@ Column {.tabset}
 ```{r}
 
 dates_attacks <- reactive({
-    total_year  %>%
-    filter(year >= input$year_range[1], year <= input$year_range[2]) %>%
-    mutate(Total2 = .data[[input$variable_interest2]]) 
+  if(input$filter_State == "All"){
+    total_year_attacks %>%
+      group_by(year) %>%
+      summarize(total_attacks = sum(total_attacks))
+  }
+  else{
+    total_year_attacks  %>%
+      filter(state == input$filter_State)
+  }
+  
   })
   
 renderPlotly({
-    ggplot(data = dates_attacks(), 
-           mapping = aes(x = year, 
-                         y = Total2)) +
-    geom_line(color = "darkred", size = 3) +
+  
+  ggplot(data = dates_attacks(), 
+       mapping = aes(x = year, y = total_attacks)) +
+   geom_area(fill = "red",
+            alpha = 0.5,
+            color = 1,    # Line color
+            lwd = 0.5,    # Line width
+            linetype = 1,
+            size = 3) +
     theme_classic() + 
     labs(y = " ", x = " ") +
     theme(axis.text = element_text(size = 15),
           axis.text.x = element_text(face = "bold"),
           axis.text.y = element_text(face = "bold"))
+
   })
 
 ```
-
-### Bar Graph
-    
-```{r}
-
-dates_attacks <- reactive({
-    total_year  %>%
-    filter(year >= input$year_range[1], year <= input$year_range[2]) %>%
-    mutate(Total2 = .data[[input$variable_interest2]]) 
-  })
-  
-renderPlotly({
-    ggplot(data = dates_attacks(), 
-           mapping = aes(x = year, 
-                         y = Total2)) +
-    geom_col(fill = "darkred") +
-    theme_classic() + 
-    labs(y = " ", x = " ") +
-    theme(axis.text = element_text(size = 15),
-          axis.text.x = element_text(face = "bold"),
-          axis.text.y = element_text(face = "bold"))
-  })
-
-```
-
 
 
 View Attack History

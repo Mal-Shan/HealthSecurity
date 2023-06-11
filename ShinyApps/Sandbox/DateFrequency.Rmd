@@ -14,6 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 #load necessary libraries
 library(tidyverse)
 library(readr)
+all_health_breaches 
 
 #load necessary report
 date_attacks <- all_health_breaches %>%
@@ -60,12 +61,13 @@ ggplot(data = date_attacks,
 
 ```{r states}
 total_year <- all_health_breaches %>%
-  select(date, affected) %>%
+  select(state, date, affected) %>%
   mutate(date= mdy(date)) %>%
   mutate(date = ymd(paste(date, sep = " ")))  %>%
   mutate(year = year(date)) %>%
   mutate(day = wday(date)) %>%
   mutate(month = month(date)) %>%
+  filter(state == "TX") %>%
   group_by(year) %>%
   drop_na() %>%
   summarize(total_affected = sum(affected))
@@ -80,13 +82,13 @@ ggplot(data = total_year,
             linetype = 1)
 
 total_month <- all_health_breaches %>%
-  select(date, affected) %>%
+  select(state, date, affected) %>%
   mutate(date= mdy(date)) %>%
   mutate(date = ymd(paste(date, sep = " ")))  %>%
   mutate(year = year(date)) %>%
   mutate(day = wday(date, label = TRUE)) %>%
   mutate(month = month(date, label = TRUE)) %>%
-  filter(year == 2023) %>%
+  filter(state == "TX") %>%
   group_by(month) %>%
   drop_na() %>%
   summarize(total_affected = sum(affected))
