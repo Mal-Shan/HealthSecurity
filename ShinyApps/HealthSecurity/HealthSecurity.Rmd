@@ -33,6 +33,7 @@ library(censusapi)
 library(tidycensus)
 library(lubridate)
 library(reactable)
+library(plotly)
 ```
 
 
@@ -232,8 +233,7 @@ Column {data-width=600}
 leaflet(options = leafletOptions(minZoom = 4)) %>%
   addProviderTiles(providers$CartoDB.Positron) %>%
   setView(-98.483330, 38.712046, zoom = 4) %>% 
-  setMaxBounds(lng1 = -178.2, lat1 = 6.6,
-               lng2 = -49.0, lat2 = 83.3) %>%
+  setMaxBounds(lng1 = -178.2, lat1 = 6.6, lng2 = -49.0, lat2 = 83.3) %>%
   addPolygons(data = states_merged_cyber_pc, 
               fillColor = ~pal_cyber(states_merged_cyber_pc$per_capita), 
               fillOpacity = 0.9, 
@@ -244,7 +244,6 @@ leaflet(options = leafletOptions(minZoom = 4)) %>%
             values = states_merged_cyber_pc$per_capita, 
             position = "bottomright", 
             title = "Cyber Attacks<br />per 100,000<br/>residents")
-
 
 
 ```
@@ -285,7 +284,9 @@ Column {.tabset .tabset-fade}
       mutate(Total = .data[[input$variable_interest]]) 
   })
   
-renderPlot({
+#change x = Category only if you want the label on plotly to change, 
+#otherwise need to keep it in this format 
+renderPlotly({
     ggplot(data = dat_type(), 
            mapping = aes(x = fct_rev(fct_reorder(Category,desc(Total))), 
                          y = Total)) +
@@ -353,11 +354,11 @@ dates_attacks <- reactive({
     mutate(Total2 = .data[[input$variable_interest2]]) 
   })
   
-renderPlot({
+renderPlotly({
     ggplot(data = dates_attacks(), 
            mapping = aes(x = year, 
                          y = Total2)) +
-    geom_line(color = "darkred") +
+    geom_line(color = "darkred", size = 3) +
     theme_classic() + 
     labs(y = " ", x = " ") +
     theme(axis.text = element_text(size = 15),
@@ -377,7 +378,7 @@ dates_attacks <- reactive({
     mutate(Total2 = .data[[input$variable_interest2]]) 
   })
   
-renderPlot({
+renderPlotly({
     ggplot(data = dates_attacks(), 
            mapping = aes(x = year, 
                          y = Total2)) +
