@@ -252,76 +252,6 @@ leaflet(options = leafletOptions(minZoom = 4)) %>%
 ```
 
 
-Types of Attacks 
-=====================================  
-
-Inputs {.sidebar}
--------------------------------------
-
-```{r}
-# From shinyWidgets
-
-selectInput("select_choice", 
-            label = h6("What do you want to know about the attacks?"), 
-    choices = list("Hacking Incident Type" = "Hacking Incident Type", 
-                   "Target Entity" = "Target Entity", 
-                   "Digital Location" = "Digital Location"), 
-    selected = 1)
-
-radioButtons(inputId = "variable_interest", label = h6("Variable of Interest"),
-             choices = c("Total Number of Attacks" = "num",
-                         "Total Number of Individuals Affected" = "total_affected"),
-             selected = NULL)
-      
-```
-
-Column {.tabset .tabset-fade}
--------------------------------------
-
-### Bar Graph
-    
-```{r}
-  dat_type <- reactive({
-    combined_attacks %>%
-      filter(choice == input$select_choice) %>%
-      mutate(Total = .data[[input$variable_interest]]) 
-  })
-  
-#change x = Category only if you want the label on plotly to change, 
-#otherwise need to keep it in this format 
-renderPlotly({
-    ggplot(data = dat_type(), 
-           mapping = aes(x = fct_rev(fct_reorder(Category,desc(Total))), 
-                         y = Total)) +
-    geom_col(fill = "firebrick") +
-    theme_classic() + 
-    coord_flip() +
-    labs(y = " ", x = " ") +
-    theme(axis.text = element_text(size = 15),
-          axis.text.x = element_text(face = "bold"),
-          axis.text.y = element_text(face = "bold"))
-    
-  })
-```
-
-### Data Table
-    
-```{r}
-dat_type_agg <- reactive({ 
-    dat_type() %>%
-    select(Category, Total) %>%
-    arrange(desc(Total))
-  })
-  
-renderDT({
-    datatable(dat_type_agg(),
-              options = list(paging = FALSE,
-                             searching = FALSE,
-                             orderClasses = TRUE))
-  })
-```
-
-
 Attacks Over Time
 =====================================  
 
@@ -428,6 +358,76 @@ renderPlotly({
 
   })
 
+```
+
+
+Types of Attacks 
+=====================================  
+
+Inputs {.sidebar}
+-------------------------------------
+
+```{r}
+# From shinyWidgets
+
+selectInput("select_choice", 
+            label = h6("What do you want to know about the attacks?"), 
+    choices = list("Hacking Incident Type" = "Hacking Incident Type", 
+                   "Target Entity" = "Target Entity", 
+                   "Digital Location" = "Digital Location"), 
+    selected = 1)
+
+radioButtons(inputId = "variable_interest", label = h6("Variable of Interest"),
+             choices = c("Total Number of Attacks" = "num",
+                         "Total Number of Individuals Affected" = "total_affected"),
+             selected = NULL)
+      
+```
+
+Column {.tabset .tabset-fade}
+-------------------------------------
+
+### Bar Graph
+    
+```{r}
+  dat_type <- reactive({
+    combined_attacks %>%
+      filter(choice == input$select_choice) %>%
+      mutate(Total = .data[[input$variable_interest]]) 
+  })
+  
+#change x = Category only if you want the label on plotly to change, 
+#otherwise need to keep it in this format 
+renderPlotly({
+    ggplot(data = dat_type(), 
+           mapping = aes(x = fct_rev(fct_reorder(Category,desc(Total))), 
+                         y = Total)) +
+    geom_col(fill = "firebrick") +
+    theme_classic() + 
+    coord_flip() +
+    labs(y = " ", x = " ") +
+    theme(axis.text = element_text(size = 15),
+          axis.text.x = element_text(face = "bold"),
+          axis.text.y = element_text(face = "bold"))
+    
+  })
+```
+
+### Data Table
+    
+```{r}
+dat_type_agg <- reactive({ 
+    dat_type() %>%
+    select(Category, Total) %>%
+    arrange(desc(Total))
+  })
+  
+renderDT({
+    datatable(dat_type_agg(),
+              options = list(paging = FALSE,
+                             searching = FALSE,
+                             orderClasses = TRUE))
+  })
 ```
 
 
