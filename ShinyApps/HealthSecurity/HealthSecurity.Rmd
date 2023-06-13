@@ -60,6 +60,18 @@ new_data <- new_data %>%
 #Loading Archived Data 
 all_health_breaches <- read_csv("https://raw.githubusercontent.com/Mal-Shan/CyberHealthData/main/latest_all_health_breaches.csv")
 
+#Check if you need to update data with latest information
+
+if(identical(all.equal(new_data, head(all_health_breaches,100)), TRUE)) {
+  next
+} else {
+  all_health_breaches <- rbind(new_data, all_health_breaches) #add the latest information 
+}
+
+#to be more specific about what you'll be adding to the dataset, instead of all 100
+#anti_data <- anti_join(new_data, tail(all_health_breaches,100))
+#all.equal(new_data, anti_data)
+
 #Creating states chloropleth dataframe
 states <- states()
 
@@ -187,7 +199,7 @@ Column {data-width=400}
 
 #### About
 
-This data dashboard seeks to explore cybersecurity attacks on healthcare entities in order to raise awareness about the vulnerability of personal health information (PHI) to hacking by malicious actors. Although healthcare organizations had experienced 1,426 attacks per week in 2022 ([Checkpoint, 2023](https://www.checkpoint.com/cyber-hub/cyber-security/what-is-healthcare-cyber-security/cyberattacks-on-the-healthcare-sector/)), many patients are unaware of the large scale threat of their information and data, with many hospital systems and healthcare organizations being slow in their implementation of security practices and notification of such vulnerabilities. The data used in this dashboard was collected by [US Department of Health and Human Services for Civil Rights](https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf), which includes data on attacks as recent as April 14th, 2023, demonstrating how prevalent and ongoing these issues are. 
+This data dashboard seeks to explore cybersecurity attacks on healthcare entities in order to raise awareness about the vulnerability of personal health information (PHI) to hacking by malicious actors. Although healthcare organizations had experienced 1,426 attacks per week in 2022 ([Checkpoint, 2023](https://www.checkpoint.com/cyber-hub/cyber-security/what-is-healthcare-cyber-security/cyberattacks-on-the-healthcare-sector/)), many patients are unaware of the large scale threat of their information and data, with many hospital systems and healthcare organizations being slow in their implementation of security practices and notification of such vulnerabilities. The data used in this dashboard was collected by [US Department of Health and Human Services for Civil Rights](https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf), which includes data on attacks as recent as June 12th, 2023, demonstrating how prevalent and ongoing these issues are. 
 
 Through the following features in this interactive dashboard, you can explore: 
 
