@@ -5,7 +5,7 @@ account: mal-shan
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 9282970
-bundleId: 7328899
+bundleId: 7331785
 url: https://mal-shan.shinyapps.io/healthsecurity/
-when: 1686416422.99254
-lastSyncTime: 1686416422.99256
+when: 1686512282.21994
+lastSyncTime: 1686512282.21996

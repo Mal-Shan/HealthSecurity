@@ -88,7 +88,7 @@ pal_cyber <- colorNumeric("Reds", domain=states_merged_cyber_pc$per_capita)
 states_merged_cyber_pc <- subset(states_merged_cyber_pc, !is.na(per_capita))
 
 popup_cyber <- paste("<b>", states_merged_cyber_pc$NAME.x, 
-                   "</b><br />Total: ", states_merged_cyber_pc$total,
+                   "</b><br />Total Individuals Affected: ", states_merged_cyber_pc$total,
                    "<br />Per capita: ", 
                    as.character(states_merged_cyber_pc$per_capita))
 
