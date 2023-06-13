@@ -34,12 +34,20 @@ library(tidycensus)
 library(lubridate)
 library(reactable)
 library(plotly)
+library(rvest)
 ```
 
 
 ```{r global, include = FALSE}
+
+url <- "https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf"
+file <-read_html(url)
+tables <-html_nodes(file, "table")
+
+health_security <- html_table(tables[[2]], fill = TRUE)
+
 #Loading Pre-Wrangled Data Frames
-all_health_breaches <- read_csv("https://raw.githubusercontent.com/Mal-Shan/CyberHealthData/main/all_health_breaches.csv")
+all_health_breaches <- read_csv("https://raw.githubusercontent.com/Mal-Shan/CyberHealthData/main/latest_all_health_breaches.csv")
 
 attack_location <- read_csv("https://raw.githubusercontent.com/Mal-Shan/CyberHealthData/main/attack_location.csv")
 
@@ -97,64 +105,34 @@ counts_entity <- all_health_breaches %>%
   count(entity) %>%
   rename(Attacks = n)
 
-#Attack Type Dataframe
-attack_type <- all_health_breaches %>%
-  drop_na() %>%
-  group_by(type) %>%
-  summarize(total_affected = sum(affected))
+#updated combined attacks dataframe 
 
-attack_type2 <- all_health_breaches %>%
-  drop_na() %>%
-  group_by(type) %>%
-  count(type) %>%
-  rename(num = n)
+summarize_and_count <- function(df, var_interest, name){
+  
+  summarize_df <- df %>%
+    drop_na() %>%
+    group_by({{var_interest}}) %>%
+    summarize(total_affected = sum(affected))
+  
+  count_df <- df %>%
+    drop_na() %>%
+    group_by({{var_interest}}) %>% 
+    count({{var_interest}}) %>%
+    rename(num = n)
+    
+ summarize_count <- 
+   full_join(summarize_df, count_df) %>%
+   rename(Category = {{var_interest}}) %>%
+   add_column(choice = name)
 
-attack_type3 <- full_join(attack_type, attack_type2, by = c("type" = "type"))
+ return(summarize_count)
+ 
+}
 
-attack_type3 <- attack_type3 %>%
-  add_column(choice = "Target Entity") %>%
-  rename(Category = type)
+combined_attacks <- rbind(summarize_and_count(all_health_breaches, type, "Target Entity"),
+                          summarize_and_count(all_health_breaches, location, "Digital Location"),
+                          summarize_and_count(all_health_breaches, incident, "Hacking Incident Type"))
 
-#Attack Location Dataframe
-attack_location1 <- attack_location %>%
-  drop_na() %>%
-  group_by(location) %>%
-  summarize(total_affected = sum(affected))
-
-attack_location2 <- attack_location %>%
-  drop_na() %>%
-  group_by(location) %>%
-  count(location) %>%
-  rename(num = n)
-
-attack_location3 <- full_join(attack_location1, attack_location2, 
-                          by = c("location" = "location"))
-
-attack_location3 <- attack_location3 %>%
-  add_column(choice = "Digital Location") %>%
-  rename(Category = location)
-
-#Attack Incident Dataframe
-attack_incident1 <- attack_incident %>%
-  drop_na() %>%
-  group_by(incident) %>%
-  summarize(total_affected = sum(affected))
-
-attack_incident2 <- attack_incident %>%
-  drop_na() %>%
-  group_by(incident) %>%
-  count(incident) %>%
-  rename(num = n)
-
-attack_incident3 <- full_join(attack_incident1, attack_incident2, 
-                          by = c("incident" = "incident"))
-
-attack_incident3 <- attack_incident3 %>%
-  add_column(choice = "Hacking Incident Type") %>%
-  rename(Category = incident)
-
-combined_attacks <- rbind(attack_type3, attack_location3)
-combined_attacks <- rbind(combined_attacks, attack_incident3)
 
 #date of attacks (year)
 
