@@ -68,10 +68,6 @@ if(identical(all.equal(new_data, head(all_health_breaches,100)), TRUE)) {
   all_health_breaches <- rbind(new_data, all_health_breaches) #add the latest information 
 }
 
-#to be more specific about what you'll be adding to the dataset, instead of all 100
-#anti_data <- anti_join(new_data, tail(all_health_breaches,100))
-#all.equal(new_data, anti_data)
-
 #Creating states chloropleth dataframe
 states <- states()
 
@@ -180,15 +176,21 @@ total_month_attacks <- all_health_breaches %>%
 
   
 #frequency of attacks
-  freq_attacks <- all_health_breaches %>%
-    add_count(entity) %>%
-    rename(total_attacks_per_entity = n) %>%
-    arrange(desc(total_attacks_per_entity)) %>%
-    select(-business_associate)
+freq_attacks <- all_health_breaches %>%
+  mutate(date = mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  select(-business_associate)
 
 
 ```
 
+```{r}
+
+#to be more specific about what you'll be adding to the dataset, instead of all 100
+#anti_data <- anti_join(new_data, tail(all_health_breaches,100))
+#all.equal(new_data, anti_data)
+  
+```
 
 Map of Attacks
 =====================================  
@@ -442,6 +444,9 @@ Inputs {.sidebar}
 ```{r}
 # From shinyWidgets
 
+
+dateRangeInput("select_Dates", label = h6("Pick a date range"))
+
 pickerInput("select_State", label = h6("Filter Geographical Location of Attacks"), 
     choices = list("Alabama" = "AL",
                    "Alaska" = "AK",
@@ -568,7 +573,8 @@ Column {.tabset}
         filter(state %in% input$select_State, 
                type %in% input$select_Type, 
                incident %in% input$select_Incident,
-               location %in% input$select_Location)
+               location %in% input$select_Location,
+               date %in% input$select_Dates)
     )
       
   })
@@ -581,6 +587,5 @@ Column {.tabset}
   })
 
   renderDataTable(datatable(filteredData()))
+  
 ```
-
-
