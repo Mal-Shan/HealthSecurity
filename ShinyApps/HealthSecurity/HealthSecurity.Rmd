@@ -78,6 +78,7 @@ total_state_incidents <-  all_health_breaches %>%
   group_by(state) %>%
   summarize(total_affected = sum(affected))
 
+#api_key <- "7fafa1056e554ba1b132c71721d21d15a938f866"
 api_key <- "7fafa1056e554ba1b132c71721d21d15a938f866"
 
 options(tigris_use_cache = TRUE)
@@ -324,7 +325,7 @@ p("The dip that we see in 2023 is not necessarily because there are less attacks
 ```
 
 
-Column {.tabset}
+Column
 -------------------------------------
 
 ### Line Graph
@@ -344,7 +345,7 @@ dates_attacks <- reactive({
   
   })
   
-renderPlotly({
+renderPlot({
   
   ggplot(data = dates_attacks(), 
        mapping = aes(x = year, y = total_attacks)) +
@@ -354,15 +355,42 @@ renderPlotly({
             lwd = 0.5,    # Line width
             linetype = 1,
             size = 3) +
-    theme_classic() + 
+    theme_classic() +
+    scale_x_continuous(breaks = round(seq(min(dates_attacks()$year), 
+                                          max(dates_attacks()$year), 
+                                          by = 1), 1)) + 
     labs(y = " ", x = " ") +
     theme(axis.text = element_text(size = 15),
-          axis.text.x = element_text(face = "bold"),
+          axis.text.x = element_text(face = "bold",
+                                     angle = 45,
+                                     vjust = 1,
+                                     hjust = 1),
           axis.text.y = element_text(face = "bold"))
 
   })
 
 ```
+
+### Data Table
+    
+```{r}
+
+dates_attacks_agg <- reactive({ 
+    dates_attacks() %>%
+    select(year, total_attacks) %>%
+    arrange(desc(year))
+
+  })
+
+renderDT({
+    datatable(dates_attacks_agg(), 
+              rownames = FALSE,
+              options = list(paging = FALSE,
+                             searching = FALSE,
+                             orderClasses = FALSE))
+  })
+```
+
 
 
 Types of Attacks 
@@ -402,7 +430,7 @@ Column {.tabset .tabset-fade}
   
 #change x = Category only if you want the label on plotly to change, 
 #otherwise need to keep it in this format 
-renderPlotly({
+renderPlot({
     ggplot(data = dat_type(), 
            mapping = aes(x = fct_rev(fct_reorder(Category,desc(Total))), 
                          y = Total)) +
