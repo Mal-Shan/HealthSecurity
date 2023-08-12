@@ -78,7 +78,6 @@ total_state_incidents <-  all_health_breaches %>%
   group_by(state) %>%
   summarize(total_affected = sum(affected))
 
-#api_key <- "7fafa1056e554ba1b132c71721d21d15a938f866"
 api_key <- "7fafa1056e554ba1b132c71721d21d15a938f866"
 
 options(tigris_use_cache = TRUE)
@@ -193,67 +192,69 @@ freq_attacks <- all_health_breaches %>%
   
 ```
 
-Map of Attacks
-=====================================  
+Explore Map of Attacks {.storyboard}
+=====================================
 
-
-Column {data-width=400}
--------------------------------------
-
-#### About
-
-This data dashboard seeks to explore cybersecurity attacks on healthcare entities in order to raise awareness about the vulnerability of personal health information (PHI) to hacking by malicious actors. Although healthcare organizations had experienced 1,426 attacks per week in 2022 ([Checkpoint, 2023](https://www.checkpoint.com/cyber-hub/cyber-security/what-is-healthcare-cyber-security/cyberattacks-on-the-healthcare-sector/)), many patients are unaware of the large scale threat of their information and data, with many hospital systems and healthcare organizations being slow in their implementation of security practices and notification of such vulnerabilities. The data used in this dashboard was collected by [US Department of Health and Human Services for Civil Rights](https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf), which includes data on attacks as recent as June 12th, 2023, demonstrating how prevalent and ongoing these issues are. 
-
-Through the following features in this interactive dashboard, you can explore: 
-
-#### Map of Attacks
-
-* click a state to reveal a popup with information about the total number and per capita amount of individuals from each state affected by CyberSecurity attacks since 2009
-* click to grab and drag the map around
-* zoom with the '+' and '--' buttons (top-left) or with your mouse's scroll wheel
-* Note: sometimes the map lags. If this occurs, reloading the page will allow for the map to be reloaded. 
-
-#### Types of Attacks 
-
-* explore the different types of hacking incidents, target entities, digital locations of attacks via bar graphs and data tables 
-* compare these values based on the number of attacks that occurred under these types of attacks and the total number of individuals affected by such attacks 
-
-#### Attacks Over Time
-
-* explore the change in the number of attacks and individuals affected by attacks from 2009 to 2023
-
-#### View Attack History
-
-* explore dataset in detail and with more options to filter dataset by physical and digital location, types of target entities, hacking incident types, and a total count of how many times that particular entity was attacked since 2009. 
-
-
-Column {data-width=600}
--------------------------------------
+### Explore the TOTAL number of individuals affected by CyberSecurity attacks across each state
     
-### Interactive map
-    
-```{r map}
+```{r}
+states_merged_cyber_pc$hover <- 
+  with(states_merged_cyber_pc, paste("Total Affected", "<br>", "<br>", population, 
+                                     "<br>", "State Population"))
 
-leaflet(options = leafletOptions(minZoom = 4)) %>%
-  addProviderTiles(providers$CartoDB.Positron) %>%
-  setView(-98.483330, 38.712046, zoom = 4) %>% 
-  setMaxBounds(lng1 = -178.2, lat1 = 6.6, lng2 = -49.0, lat2 = 83.3) %>%
-  addPolygons(data = states_merged_cyber_pc, 
-              fillColor = ~pal_cyber(states_merged_cyber_pc$per_capita), 
-              fillOpacity = 0.9, 
-              weight = 0.2, 
-              smoothFactor = 0.2, 
-              popup = ~popup_cyber) %>%
-  addLegend(pal = pal_cyber, 
-            values = states_merged_cyber_pc$per_capita, 
-            position = "bottomright", 
-            title = "Cyber Attacks<br />per 100,000<br/>residents")
+# give state boundaries a white border
+l <- list(color = toRGB("white"), width = 2)
 
+# specify some map projection/options
+g <- list(
+  scope = 'usa',
+  projection = list(type = 'albers usa'),
+  showlakes = TRUE,
+  lakecolor = toRGB('white'))
+
+
+fig <- plot_geo(states_merged_cyber_pc, locationmode = 'USA-states')
+
+fig <- fig %>% add_trace(
+    z = ~total_affected, locations = ~STUSPS, text = ~hover,
+    color = ~total_affected, colors = 'Reds'
+  )
+
+fig <- fig %>% layout(
+    geo = g
+  )
+
+
+renderPlotly({
+  fig
+})
 
 ```
 
+### Explore the PER CAPITA number of individuals affected by CyberSecurity attacks across each state
+```{r}
+states_merged_cyber_pc$hover2 <- 
+  with(states_merged_cyber_pc, paste("Per Capita Affected", "<br>", "<br>", population, 
+                                     "<br>", "State Population"))
 
-Attacks Over Time
+fig2 <- plot_geo(states_merged_cyber_pc, locationmode = 'USA-states')
+
+fig2 <- fig2 %>% add_trace(text = ~hover2, z = ~per_capita, locations = ~STUSPS, text = ~hover,
+    color = ~per_capita, colors = 'Reds'
+  )
+
+fig2 <- fig2 %>% layout(
+    geo = g
+  )
+
+
+renderPlotly({
+  fig2
+})
+
+```
+
+Attacks Over Time {data-icon="fa-clock"}
 =====================================  
 
 Inputs {.sidebar}
@@ -325,7 +326,7 @@ p("The dip that we see in 2023 is not necessarily because there are less attacks
 ```
 
 
-Column
+Column {.tabset .tabset-fade}
 -------------------------------------
 
 ### Line Graph
@@ -393,7 +394,7 @@ renderDT({
 
 
 
-Types of Attacks 
+Types of Attacks {data-icon="fa-signal"}
 =====================================  
 
 Inputs {.sidebar}
@@ -463,7 +464,7 @@ renderDT({
 ```
 
 
-View Attack History
+View Attack History {data-icon="fa-table"}
 ===================================== 
 
 Inputs {.sidebar}
