@@ -1,0 +1,22 @@
+..generic:
+  git2rdata: 0.4.0
+  optimize: yes
+  NA string: NA
+  hash: 75476f73a40a8e5a7ae948b15a7655eddf397f27
+  data_hash: bd23f27531d4c110934a0300380519b2d2e02b41
+entity:
+  class: character
+state:
+  class: character
+type:
+  class: character
+affected:
+  class: numeric
+date:
+  class: character
+incident:
+  class: character
+location:
+  class: character
+business_associate:
+  class: character

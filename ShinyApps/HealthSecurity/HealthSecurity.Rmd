@@ -2,6 +2,8 @@
 title: "Health Care Security Attacks"
 output: 
   flexdashboard::flex_dashboard:
+    fig_crop: no
+    orientation: rows
     theme: 
       bg: "#FFFFFF"
       fg: "#000000"
@@ -35,38 +37,44 @@ library(lubridate)
 library(reactable)
 library(plotly)
 library(rvest)
+library(git2rdata)
 ```
 
 
 ```{r global, include = FALSE}
 
 #collecting latest 100 cases from HHS 
-url <- "https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf"
-file <- read_html(url)
-tables <- html_nodes(file, "table")
-new_data <- html_table(tables[[2]], fill = TRUE)
+#url <- "https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf"
+#file <- read_html(url)
+#tables <- html_nodes(file, "table")
+#new_data <- html_table(tables[[2]], fill = TRUE)
 
-new_data <- new_data %>%
-  select(-"Expand All", -"Web Description") %>%
-  rename("entity" = "Name of Covered Entity",
-         "state" = "State",
-         "type" = "Covered Entity Type",
-         "affected" = "Individuals Affected",
-         "date" = "Breach Submission Date",
-         "incident" = "Type of Breach",
-         "location" = "Location of Breached Information",
-         "business_associate" = "Business Associate Present")
+#new_data <- new_data %>%
+  #select(-"Expand All", -"Web Description") %>%
+  #rename("entity" = "Name of Covered Entity",
+         #"state" = "State",
+         #"type" = "Covered Entity Type",
+         #"affected" = "Individuals Affected",
+         #"date" = "Breach Submission Date",
+         #"incident" = "Type of Breach",
+         #"location" = "Location of Breached Information",
+         #"business_associate" = "Business Associate Present")
 
 #Loading Archived Data 
-all_health_breaches <- read_csv("https://raw.githubusercontent.com/Mal-Shan/CyberHealthData/main/latest_all_health_breaches.csv")
+
+#all_health_breaches <- read_tsv("https://raw.githubusercontent.com/Mal-Shan/HealthSecurity/main/latest_all_health_breaches.tsv")
+
+all_health_breaches <- read_csv("https://raw.githubusercontent.com/Mal-Shan/HealthSecurity/main/Backup_Data.csv")
 
 #Check if you need to update data with latest information
 
-if(identical(all.equal(new_data, head(all_health_breaches,100)), TRUE)) {
-  next
-} else {
-  all_health_breaches <- rbind(new_data, all_health_breaches) #add the latest information 
-}
+#if(identical(all.equal(new_data, head(all_health_breaches,100)), TRUE)) {
+  #next
+#} 
+
+#else {
+  #all_health_breaches <- rbind(new_data, all_health_breaches) #add the latest information 
+#}
 
 #Creating states chloropleth dataframe
 states <- states()
@@ -161,19 +169,6 @@ total_year_attacks <- all_health_breaches %>%
   drop_na() %>%
   summarize(total_attacks = sum(n))
 
-
-#date of attacks (month)
-
-total_month_attacks <- all_health_breaches %>%
-  mutate(date = mdy(date)) %>%
-  mutate(date = ymd(paste(date, sep = " ")))  %>%
-  mutate(month = month(date)) %>%
-  add_count(entity) %>%
-  select(state, month, n) %>%
-  group_by(state, month) %>%
-  drop_na() %>%
-  summarize(total_attacks = sum(n))
-
   
 #frequency of attacks
 freq_attacks <- all_health_breaches %>%
@@ -188,21 +183,44 @@ sum_merged_cyber_pc <- states_merged_cyber_pc %>%
 
 ```
 
-```{r}
-
-#to be more specific about what you'll be adding to the dataset, instead of all 100
-#anti_data <- anti_join(new_data, tail(all_health_breaches,100))
-#all.equal(new_data, anti_data)
-  
-```
-
-
-Map of Attacks {.storyboard data-icon="fa-map"}
+Map of Attacks {data-icon="fa-map"}
 =====================================
 
-### Hover over the map to see the TOTAL number of individuals affected by CyberSecurity attacks in each state
-    
-```{r}
+About {.sidebar data-width=375}
+-------------------------------------
+
+#### About
+
+This data dashboard seeks to explore cybersecurity attacks on healthcare entities in order to raise awareness about the vulnerability of personal health information (PHI) to hacking by malicious actors. Although healthcare organizations had experienced 1,426 attacks per week in 2022 ([Checkpoint, 2023](https://www.checkpoint.com/cyber-hub/cyber-security/what-is-healthcare-cyber-security/cyberattacks-on-the-healthcare-sector/)), many patients are unaware of the large scale threat of their information and data, with many hospital systems and healthcare organizations being slow in their implementation of security practices and notification of such vulnerabilities. The data used in this dashboard was collected by [US Department of Health and Human Services for Civil Rights](https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf), which includes data on attacks as recent as August 21st, 2023, demonstrating how prevalent and ongoing these issues are. 
+
+Through the following features in this interactive dashboard, you can explore: 
+
+#### Map of Attacks
+
+* click a state to reveal a popup with information about the total number and per capita amount of individuals from each state affected by CyberSecurity attacks since 2009
+* click to grab and drag the map around
+* zoom with the '+' and '--' buttons (top-left) or with your mouse's scroll wheel
+* Note: sometimes the map lags. If this occurs, reloading the page will allow for the map to be reloaded. 
+
+#### Types of Attacks 
+
+* explore the different types of hacking incidents, target entities, digital locations of attacks via bar graphs and data tables 
+* compare these values based on the number of attacks that occurred under these types of attacks and the total number of individuals affected by such attacks 
+
+#### Attacks Over Time
+
+* explore the change in the number of attacks and individuals affected by attacks from 2009 to 2023
+
+#### View Attack History
+
+* explore dataset in detail and with more options to filter dataset by physical and digital location, types of target entities, hacking incident types, and a total count of how many times that particular entity was attacked since 2009. 
+
+
+Row {data-width=600 data-height=1000}
+-------------------------------------
+
+```{r map}
+
 states_merged_cyber_pc$hover <- 
   with(states_merged_cyber_pc, paste("Total Affected", "<br>", "<br>", population, 
                                      "<br>", "State Population"))
@@ -225,9 +243,12 @@ fig <- fig %>% add_trace(
     color = ~total_affected, colors = 'Reds'
   )
 
-fig <- fig %>% layout(
-    geo = g
-  )
+fig <- fig %>% layout(geo = g,
+                      title = "Total Affected from Health Cyberattacks per State",
+                      plot_bgcolor = "rgb(245,245,245)",
+                      paper_bgcolor = "rgb(245,245,245)",
+                      fig_bgcolor   = "rgb(245,245,245)",
+                      dragmode=FALSE)
 
 fig <- fig %>% colorbar(title = "Total Number Affected")
 
@@ -235,11 +256,14 @@ renderPlotly({
   fig
 })
 
-```
+```   
 
-### Hover over the map to see the PER CAPITA number of individuals affected by CyberSecurity attacks in each state
 
+Row {data-width=600 data-height=1000}
+-------------------------------------
+    
 ```{r}
+
 states_merged_cyber_pc$hover2 <- 
   with(states_merged_cyber_pc, paste("Per Capita Affected", "<br>", "<br>", population, 
                                      "<br>", "State Population"))
@@ -250,9 +274,11 @@ fig2 <- fig2 %>% add_trace(text = ~hover2, z = ~per_capita, locations = ~STUSPS,
     color = ~per_capita, colors = 'Reds'
   )
 
-fig2 <- fig2 %>% layout(
-    geo = g
-  )
+fig2 <- fig2 %>% layout(geo = g,
+                        title = "Per Capita Affected from Health Cyberattacks per State",
+                        plot_bgcolor = "rgb(245,245,245)",
+                        paper_bgcolor = "rgb(245,245,245)",
+                        dragmode=FALSE)
 
 fig2 <- fig2 %>% colorbar(title = "Per Capita Affected")
 
@@ -260,40 +286,6 @@ renderPlotly({
   fig2
 })
 
-```
-
-### View Table of TOTAL and PER CAPITA number of individuals affected by CyberSecurity attacks in each state
-    
-```{r}
-
-state_attack_summary <- reactive({ 
-    sum_merged_cyber_pc %>%
-    rename(State_Name = NAME.x)
-
-  })
-
-renderDT({
-    datatable(state_attack_summary(), 
-              rownames = FALSE,
-              options = list(paging = FALSE,
-                             searching = FALSE,
-                             orderClasses = FALSE))
-  })
-
-```
-
-### View Table of ALL CyberSecurity attacks (including entity, location of attack, date affected, number affected, etc.)
-
-```{r}
-#renderDataTable(datatable(freq_attacks))
-
-renderDT({
-    datatable(freq_attacks, 
-              rownames = FALSE,
-              options = list(paging = TRUE,
-                             searching = TRUE,
-                             orderClasses = FALSE))
-  })
 
 ```
 
@@ -304,9 +296,11 @@ Attacks Over Time {data-icon="fa-clock"}
 Inputs {.sidebar}
 -------------------------------------
 
+#### Filtering Geographical Location of Attacks
+
 ```{r}
 
-selectInput(inputId = "filter_State", label = h6("Filter Geographical Location of Attacks"), 
+selectInput(inputId = "filter_State", label = h6(""), 
     choices = list("All States" = "All", 
                    "Alabama" = "AL",
                    "Alaska" = "AK",
@@ -370,10 +364,8 @@ p("The dip that we see in 2023 is not necessarily because there are less attacks
 ```
 
 
-Column {.tabset .tabset-fade}
+Row
 -------------------------------------
-
-### Line Graph
 
 ```{r}
 
@@ -400,7 +392,11 @@ renderPlot({
             lwd = 0.5,    # Line width
             linetype = 1,
             size = 3) +
-    theme_classic() +
+    theme(panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          panel.background = element_blank(), 
+          plot.background = element_rect(fill = "#f5f5f5"),
+          axis.line = element_line(colour = "black")) + 
     scale_x_continuous(breaks = round(seq(min(dates_attacks()$year), 
                                           max(dates_attacks()$year), 
                                           by = 1), 1)) + 
@@ -416,13 +412,13 @@ renderPlot({
 
 ```
 
-### Data Table
+Row {data-height=650}
+-------------------------------------
     
 ```{r}
 
 dates_attacks_agg <- reactive({ 
     dates_attacks() %>%
-    select(year, total_attacks) %>%
     arrange(desc(year))
 
   })
@@ -430,7 +426,7 @@ dates_attacks_agg <- reactive({
 renderDT({
     datatable(dates_attacks_agg(), 
               rownames = FALSE,
-              options = list(paging = FALSE,
+              options = list(paging = TRUE,
                              searching = FALSE,
                              orderClasses = FALSE))
   })
@@ -445,27 +441,33 @@ Types of Attacks {data-icon="fa-signal"}
 Inputs {.sidebar}
 -------------------------------------
 
+#### Analyzing Attack Types
+
 ```{r}
 # From shinyWidgets
 
+p("   ")
+
+strong("Variable of Interest: ")
+
+radioButtons(inputId = "variable_interest", label = h6(" "),
+             choices = c("Total Number of Attacks" = "num",
+                         "Total Number of Individuals Affected" = "total_affected"),
+             selected = NULL)
+
+strong("What do you want to know about the attacks?")
+
 selectInput("select_choice", 
-            label = h6("What do you want to know about the attacks?"), 
+            label = h6(""), 
     choices = list("Hacking Incident Type" = "Hacking Incident Type", 
                    "Target Entity" = "Target Entity", 
                    "Digital Location" = "Digital Location"), 
     selected = 1)
-
-radioButtons(inputId = "variable_interest", label = h6("Variable of Interest"),
-             choices = c("Total Number of Attacks" = "num",
-                         "Total Number of Individuals Affected" = "total_affected"),
-             selected = NULL)
       
 ```
 
-Column {.tabset .tabset-fade}
+Row
 -------------------------------------
-
-### Bar Graph
     
 ```{r}
   dat_type <- reactive({
@@ -480,8 +482,12 @@ renderPlot({
     ggplot(data = dat_type(), 
            mapping = aes(x = fct_rev(fct_reorder(Category,desc(Total))), 
                          y = Total)) +
-    geom_col(fill = "firebrick") +
-    theme_classic() + 
+    geom_col(fill = "firebrick") + 
+    theme(panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          panel.background = element_blank(), 
+          plot.background = element_rect(fill = "#f5f5f5"),
+          axis.line = element_line(colour = "black")) + 
     coord_flip() +
     labs(y = " ", x = " ") +
     theme(axis.text = element_text(size = 15),
@@ -491,7 +497,8 @@ renderPlot({
   })
 ```
 
-### Data Table
+Row
+-------------------------------------
     
 ```{r}
 dat_type_agg <- reactive({ 
@@ -502,8 +509,89 @@ dat_type_agg <- reactive({
   
 renderDT({
     datatable(dat_type_agg(),
-              options = list(paging = FALSE,
+              options = list(paging = TRUE,
                              searching = FALSE,
                              orderClasses = TRUE))
   })
 ```
+
+
+Summary of Attacks {data-icon="fa-table"}
+===================================== 
+
+Row
+-------------------------------------
+
+### Attacks this month 
+
+```{r}
+
+monthly_attacks <- all_health_breaches %>%
+  mutate(date = mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(month = month(date),
+         year = year(date)) %>%
+  add_count(entity) %>%
+  select(month, year, n) %>%
+  slice_max(year) %>%
+  slice_max(month) %>%
+  summarize(total_attacks = sum(n))
+
+monthly_attacks <- as.numeric(monthly_attacks)
+
+valueBox(monthly_attacks, icon = "fa-laptop-medical")
+```
+
+### Affected this month  
+
+```{r}
+
+monthly_affected <- all_health_breaches %>%
+  mutate(date = mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(month = month(date),
+         year = year(date)) %>%
+  select(affected, month, year) %>%
+  filter(year == 2023) %>%
+  slice_max(month) %>%
+  summarize(affected_this_month = sum(affected))
+
+monthly_affected <- as.numeric(monthly_affected)
+
+valueBox(monthly_affected, icon = "fa-bugs")
+
+```
+
+### Affected this year 
+
+```{r}
+
+yearly_affected <- all_health_breaches %>%
+  mutate(date = mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(year = year(date)) %>%
+  select(affected, year) %>%
+  slice_max(year) %>%
+  summarize(affected_this_year = sum(affected))
+
+valueBox(yearly_affected, 
+         icon = "fa-robot")
+```
+
+Row
+-------------------------------------
+
+```{r}
+
+#renderDataTable(datatable(freq_attacks))
+
+renderDT({
+    datatable(freq_attacks, 
+              rownames = FALSE,
+              options = list(paging = TRUE,
+                             searching = TRUE,
+                             orderClasses = FALSE))
+  })
+
+```
+
