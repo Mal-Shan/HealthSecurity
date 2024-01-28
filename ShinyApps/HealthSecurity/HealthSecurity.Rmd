@@ -40,12 +40,9 @@ library(ggpubr)
 
 
 ```{r global, include = FALSE}
+
 #total of 5,847 cases
 all_health_breaches <- read_csv("https://raw.githubusercontent.com/Mal-Shan/HealthSecurity/main/all_health_breaches23.csv")
-
-#testing making a change to the document
-
-#reduced to 5,823 cases for missing categorical variables 
 all_health_breaches <- all_health_breaches %>%
   rename("entity" = "Name of Covered Entity",
          "state" = "State",
@@ -78,142 +75,123 @@ new_data <- new_data %>%
 different <- generics::setdiff(new_data, all_health_breaches)
 all_health_breaches <- rbind(different, all_health_breaches)
 
+#creating a copy of the original dataframe with the missing values 
+messy_dataframe <- all_health_breaches
+
+#cleaning the dataframe to remove missing values and exceedingly large cases 
 all_health_breaches <- all_health_breaches %>%   
   filter(affected < 15000000) %>%
   mutate(location = stringr::str_remove(location, ',.*'),
          incident = stringr::str_remove(incident, ',.*'),
          type = stringr::str_remove(type, ',.*')) %>%
-  drop_na(c(entity, state, type, date, incident, location, business_associate))
+  drop_na(c(entity, state, type, date, incident, location, business_associate, affected))
 
-#replacing NA values for affected values with the mean - imputation
-missing_affected <- all_health_breaches[is.na(all_health_breaches$affected), ]
-
-for(i in nrow(missing_affected)){
-  
-  #figure out which state the missing value came from 
-  state_name <- toString(missing_affected[i,"state"])
-  
-  #take the average number of affected individuals that do not include this case 
-  replaced_value <- all_health_breaches %>%
-    drop_na(affected) %>%
-    filter(state == state_name) %>%
-    summarize(replaced_value = mean(affected))
-  
-  #replace the NA value with this mean value 
-  replaced_value <- as.numeric(replaced_value)
-  replaced_value <- round(replaced_value, digits = 0)
-  
-  replaced_entity <- toString(missing_affected[i,"entity"])
-  replaced_date <- toString(missing_affected[i,"date"])
-  replaced_id <- as.numeric(which(all_health_breaches$entity == replaced_entity & all_health_breaches$date == replaced_date, 
-        arr.ind=TRUE))
-  
-  all_health_breaches[replaced_id,"affected"] <- replaced_value
-  
-
-  
-}
-
+#log transforming the data to make it easier to view larger values in plots 
 all_health_breaches_transformed <- all_health_breaches
 all_health_breaches_transformed$affected_transformed <- log10(all_health_breaches$affected)
 
-#Creating states chloropleth dataframe
+#Creating states chloropleth dataframe (for cleaned dataset)
 states <- states()
-
 states <- states %>%
   sf::st_transform('+proj=longlat +datum=WGS84')
-
 api_key <- "7fafa1056e554ba1b132c71721d21d15a938f866"
 
-#not removing missing values
 total_state_incidents <-  all_health_breaches %>%
   group_by(state) %>%
-  summarize(total_affected = sum(affected), #latest addition to the total state incidents: 1/1/24
-            number_attacks = n())
+  summarize(total_affected = sum(affected),
+            number_attacks = n(),
+            average_affected = mean(affected))
 
 options(tigris_use_cache = TRUE)
-
 state_pop <-  getCensus(name="acs/acs5", 
                         vintage=2020, #was set to 2015 before 
                         key=api_key, 
                         vars=c("NAME", "B01003_001E"), 
                         region="state:*")
-
 colnames(state_pop) <- c("state_id", "NAME", "population")
 state_pop$state_id <- as.numeric(state_pop$state_id)
-
 state_off <- data.frame(state.abb, state.name)
 colnames(state_off) <- c("state", "NAME")
-
 state_pop <- left_join(state_pop, state_off)
 state_pop$state <- ifelse(state_pop$NAME=="District of Columbia", "DC", as.character(state_pop$state))
 state_pop$state <- ifelse(state_pop$NAME=="Puerto Rico", "PR", as.character(state_pop$state))
-
 cyber_state_pop <- left_join(total_state_incidents, state_pop)
-
-cyber_state_pop$per_capita <- round(cyber_state_pop$total_affected/cyber_state_pop$population*100000,2) #per 100,000
-
-cyber_state_pop <- filter(cyber_state_pop, !is.na(per_capita))
-
+#cyber_state_pop$per_capita <- round(cyber_state_pop$average_affected/cyber_state_pop$population*100000,2)
+#cyber_state_pop <- filter(cyber_state_pop, !is.na(per_capita))
 states_merged_cyber_pc <- geo_join(states, cyber_state_pop, "STUSPS", "state")
-
-pal_cyber <- colorNumeric("Reds", domain=states_merged_cyber_pc$per_capita)
-
-states_merged_cyber_pc <- subset(states_merged_cyber_pc, !is.na(per_capita))
-
+#pal_cyber <- colorNumeric("Reds", domain=states_merged_cyber_pc$per_capita)
+#states_merged_cyber_pc <- subset(states_merged_cyber_pc, !is.na(per_capita))
 popup_cyber <- paste("<b>", states_merged_cyber_pc$NAME.x, 
                    "</b><br />Total Individuals Affected: ", states_merged_cyber_pc$total,
-                   "<br />Per capita: ", 
-                   as.character(states_merged_cyber_pc$per_capita))
+                   "<br />Average Affected: ", 
+                   as.character(states_merged_cyber_pc$average_affected))
 
-dropped_total_state_incidents <-  all_health_breaches %>%
+
+#Creating states chloropleth dataframe (for missing datset)
+missing_value <-  messy_dataframe %>%
   group_by(state) %>%
   summarize(total_affected = sum(affected))
 
 options(tigris_use_cache = TRUE)
-
 state_pop_2 <-  getCensus(name="acs/acs5", 
                         vintage=2020, #was set to 2015 before 
                         key=api_key, 
                         vars=c("NAME", "B01003_001E"), 
                         region="state:*")
-
 colnames(state_pop_2) <- c("state_id", "NAME", "population")
 state_pop_2$state_id <- as.numeric(state_pop_2$state_id)
-
 state_off_2 <- data.frame(state.abb, state.name)
 colnames(state_off_2) <- c("state", "NAME")
-
 state_pop_2 <- left_join(state_pop, state_off)
 state_pop_2$state <- ifelse(state_pop_2$NAME=="District of Columbia", "DC", as.character(state_pop$state))
 state_pop_2$state <- ifelse(state_pop_2$NAME=="Puerto Rico", "PR", as.character(state_pop$state))
-
-cyber_state_pop_2 <- left_join(dropped_total_state_incidents, state_pop_2)
-
-cyber_state_pop_2$per_capita <- round(cyber_state_pop_2$total_affected/cyber_state_pop_2$population*100000,2) #per 100,000
-
-cyber_state_pop_2 <- filter(cyber_state_pop_2, !is.na(per_capita))
-
+cyber_state_pop_2 <- left_join(missing_value, state_pop_2)
+#cyber_state_pop_2$per_capita <- round(cyber_state_pop_2$total_affected/cyber_state_pop_2$population*10000,2) #per 10,000
+#cyber_state_pop_2 <- filter(cyber_state_pop_2, !is.na(per_capita))
 states_merged_cyber_pc_2 <- geo_join(states, cyber_state_pop_2, "STUSPS", "state")
-
-pal_cyber_2 <- colorNumeric("Reds", domain=states_merged_cyber_pc_2$per_capita)
-
-states_merged_cyber_pc_2 <- subset(states_merged_cyber_pc_2, !is.na(per_capita))
-
+#pal_cyber_2 <- colorNumeric("Reds", domain=states_merged_cyber_pc_2$per_capita)
+#states_merged_cyber_pc_2 <- subset(states_merged_cyber_pc_2, !is.na(per_capita))
 popup_cyber_2 <- paste("<b>", states_merged_cyber_pc_2$NAME.x, 
                    "</b><br />Total Individuals Affected: ", states_merged_cyber_pc_2$total,
-                   "<br />Per capita: ", 
-                   as.character(states_merged_cyber_pc_2$per_capita))
+                   "<br />Average Affected: ", 
+                   as.character(states_merged_cyber_pc_2$average_affected))
 
+#Creating states chloropleth dataframe (for removal of missing datset)
+remove_missing_value <-  messy_dataframe %>%
+  drop_na(affected) %>%
+  group_by(state) %>%
+  summarize(total_affected = sum(affected))
 
+options(tigris_use_cache = TRUE)
+state_pop_3 <-  getCensus(name="acs/acs5", 
+                        vintage=2020, #was set to 2015 before 
+                        key=api_key, 
+                        vars=c("NAME", "B01003_001E"), 
+                        region="state:*")
+colnames(state_pop_3) <- c("state_id", "NAME", "population")
+state_pop_3$state_id <- as.numeric(state_pop_3$state_id)
+state_off_3 <- data.frame(state.abb, state.name)
+colnames(state_off_3) <- c("state", "NAME")
+state_pop_3 <- left_join(state_pop, state_off)
+state_pop_3$state <- ifelse(state_pop_3$NAME=="District of Columbia", "DC", as.character(state_pop$state))
+state_pop_3$state <- ifelse(state_pop_3$NAME=="Puerto Rico", "PR", as.character(state_pop$state))
+cyber_state_pop_3 <- left_join(remove_missing_value, state_pop_3)
+#cyber_state_pop_3$per_capita <- round(cyber_state_pop_3$total_affected/cyber_state_pop_3$population*10000,2) #per 10,000
+#cyber_state_pop_3 <- filter(cyber_state_pop_3, !is.na(per_capita))
+states_merged_cyber_pc_3 <- geo_join(states, cyber_state_pop_3, "STUSPS", "state")
+#pal_cyber_3 <- colorNumeric("Reds", domain=states_merged_cyber_pc_3$per_capita)
+#states_merged_cyber_pc_3 <- subset(states_merged_cyber_pc_3, !is.na(per_capita))
+popup_cyber_3 <- paste("<b>", states_merged_cyber_pc_3$NAME.x, 
+                   "</b><br />Total Individuals Affected: ", states_merged_cyber_pc_3$total,
+                   "<br />Average Affected: ", 
+                   as.character(states_merged_cyber_pc_3$average_affected))
 
 #counts for entity 
 counts_entity <- all_health_breaches %>%
   count(entity) %>%
   rename(Attacks = n)
 
-#updated combined attacks dataframe 
-
+#function for creating combined attacks dataframe 
 summarize_and_count <- function(df, var_interest, name){
   
   summarize_df <- df %>%
@@ -245,7 +223,6 @@ combined_attacks <- rbind(summarize_and_count(all_health_breaches,
 
 
 #date of attacks (year)
-
 total_year_attacks <- all_health_breaches %>%
   mutate(date = mdy(date)) %>%
   mutate(date = ymd(paste(date, sep = " ")))  %>%
@@ -262,11 +239,6 @@ freq_attacks <- all_health_breaches %>%
   mutate(date = mdy(date)) %>%
   mutate(date = ymd(paste(date, sep = " ")))  %>%
   select(-business_associate)
-
-#important information from merged state dataframe
-sum_merged_cyber_pc <- states_merged_cyber_pc %>%
-  as.data.frame() %>%
-  select(NAME.x, total_affected, per_capita)
 
 
 #games howell post-hoc test function definition 
@@ -332,7 +304,7 @@ games.howell <- function(grp, obs) {
   results[c(2, 3:ncol(results))] <- round(as.numeric(as.matrix(results[c(2, 3:ncol(results))])), digits = 3)
   
   # Rename data frame columns
-  colnames(results) <- c('groups', 'Mean Difference', 'Standard Error', 't', 'df', 'p', 'upper limit', 'lower limit')
+  colnames(results) <- c('groups', 'Mean Difference', 'Standard Error', 't', 'df', 'p', 'upper_limit', 'lower_limit')
 
   return(results)
 }
@@ -555,27 +527,11 @@ Column {.tabset data-width=500}
 ```
 
 
-Map of Attacks {data-icon="fa-map"}
-=====================================
+Map of Attacks {.storyboard data-icon="fa-map"}
+===================================== 
 
-Row {.sidebar data-width=300}
--------------------------------------
-
-#### Map of Attacks
-
-This page includes information regarding the spread of cyber-health attacks across the country. There are **TWO maps**, which are shaded based on two distinct values: the total *number of affected* individuals and the *per capita* number of affected individuals. Specifically, the per capita value was calculated by dividing the total number of affected individuals in a given state by the respective population of that state, based on [2021 Census data](https://www.census.gov/data/what-is-data-census-gov/latest-releases/2021.html). 
-
-When comparing the total number of attacks against the per capita value of attacks, we see that more populous states **(like California, Texas, Florida and New York)** tend to have a larger number of affected individuals, but when we adjust for the respective states' populations, we see that states like **Tennessee, Delaware, and Nevada** have larger portions of their populations affected by these cyberattacks. 
-
-Below the map is a summary table which provides a breakdown of each state's population, total number of affected residents, per capita value of affected residents, and the total number of attacks that occurred in that state. Regarding the latter value, we see again that states with **larger populations** are more likely to have a **larger number of attacks**. 
-
-To explore these trends for yourself, you can use your mouse to hover a state and reveal a pop-up with information about the number of affected individuals from each state since 2009, along with 2021 Census data regarding each state's population. 
-
-Row {.tabset data-width=700 data-height=600}
--------------------------------------
-
-### Total Affected from Health Cyberattacks per State
-
+### 📌 According to this map of the **total affected individuals** from health cyberattacks across the US, more populous states tend to have a larger number of affected individuals
+    
 ```{r}
 
 states_merged_cyber_pc$hover <- 
@@ -607,45 +563,56 @@ renderPlotly({
   fig
 })
 
-```  
+```
 
-### Per Capita Affected from Health Cyberattacks per State
+***
+
+- This page includes information regarding the spread of cyber-health attacks across the country. There are **TWO maps** on this page, which are shaded based on two distinct values. The current map demonstrates the total *number of affected* individuals for each state from 2011 to the present day. 
+
+- When comparing the total number of attacks against the average number of affected individuals, we see that more populous states **(like California, Texas, Florida and New York)** have an overall larger number of individuals affected by health cyber attacks, but when we adjust for the number of attacks that each state receives, we see that states like **Delaware, Tennessee, and Nevada** have more individuals affected in a single attack.
+
+- To explore these trends for yourself, you can use your mouse to hover a state and reveal a pop-up with information about the number of affected individuals from each state since 2009, along with 2021 Census data regarding each state's population.
+
+### 📌 This map adjusts for the number of attacks that each state receives to see how many people on average were affected by each attack in a given state
 
 ```{r}
 
 states_merged_cyber_pc$hover2 <- 
-  with(states_merged_cyber_pc, paste("Per Capita Affected", "<br>", "<br>", population, 
+  with(states_merged_cyber_pc, paste("Average Affected", "<br>", "<br>", population, 
                                      "<br>", "State Population"))
 
 fig2 <- plot_geo(states_merged_cyber_pc, locationmode = 'USA-states')
 
-fig2 <- fig2 %>% add_trace(text = ~hover2, z = ~per_capita, locations = ~STUSPS, text = ~hover,
-    color = ~per_capita, colors = 'Reds'
+fig2 <- fig2 %>% add_trace(text = ~hover2, z = ~average_affected, locations = ~STUSPS, text = ~hover,
+    color = ~average_affected, colors = 'Reds'
   )
 
 fig2 <- fig2 %>% layout(geo = g,
                         dragmode=FALSE)
 
-fig2 <- fig2 %>% colorbar(title = "Per Capita Affected")
+fig2 <- fig2 %>% colorbar(title = "Average Affected")
 
 renderPlotly({
   fig2
 })
 
-
 ```
 
+***
 
-Row {.tabset data-width=300 data-height=400}
--------------------------------------
+- This page includes information regarding the spread of cyber-health attacks across the country. There are **TWO maps** on this page, which are shaded based on two distinct values. The current map demonstrates the average number of affected individuals for a given attack in each state. Specifically, the per capita value was calculated by dividing the total number of affected individuals in a given state by the total number of attacks that state has received from 2011 to the present day.
 
-### Summary Table
+- When comparing the total number of attacks against the average number of affected individuals, we see that more populous states **(like California, Texas, Florida and New York)** have an overall larger number of individuals affected by health cyber attacks, but when we adjust for the number of attacks that each state receives, we see that states like **Delaware, Tennessee, and Nevada** have more individuals affected in a single attack.
+
+- To explore these trends for yourself, you can use your mouse to hover a state and reveal a pop-up with information about the number of affected individuals from each state since 2009, along with 2021 Census data regarding each state's population.
+
+### 📌 The following **summary table** organizes the data used to create the previous visualizations, allowing you to numerically compare which states were most impacted
 
 ```{r}
 
 states_info <- reactive({ 
   cyber_state_pop %>%
-    select(NAME, population, number_attacks, total_affected, per_capita)
+    select(NAME, population, total_affected, number_attacks, average_affected)
   })
 
 renderDT({
@@ -656,7 +623,79 @@ renderDT({
                              orderClasses = FALSE,
                              info = FALSE))
   })
+
+
 ```
+
+***
+
+- This is a summary table which provides a breakdown of each state's population, total number of affected residents, average number of affected residents for a given attack, and the total number of attacks that occurred in that state. 
+
+- The **average_affected** values are calculated through the following formula: 
+**total_affected/number_attacks**
+
+- Regarding the latter value, we see again that states with **larger populations** are more likely to have a **larger number of attacks**. In comparison, the states that **on average** have more individuals affected from a given attack do not fall within the top 10 most populous states in the country. 
+
+### 💻 NOTE: The data used to inform these conclusions was cleaned to deal with **missing data**
+
+```{r}
+
+messy_NA <- reactive({ 
+  
+  messy_dataframe[!complete.cases(messy_dataframe), ]
+  
+  })
+
+renderDT({
+    datatable(messy_NA(), 
+              rownames = FALSE,
+              options = list(paging = FALSE,
+                             searching = FALSE,
+                             orderClasses = FALSE,
+                             info = FALSE))
+  })
+
+```
+    
+
+***
+
+- **Data processing** is necessary to ensure that the results I am analyzing are not skewed/biased by missing information and/or outliers in the dataset. Since the information used in the DHHS database is taken from reports filed by the affected entities, we can assume that there will be mistakes in this self-reporting process.
+
+- For example, before loading in the data to create these map visualizations, I must first deal with any missing values for our variables of interest by **removing any cases that do not have**: the name of the affected entity, the number of affected individuals, the state in which the attacks took place, the type of entity that was affected, the date the attack took place, the type of incident, the digital location of the attack, and/or information regarding whether a business associate was present.
+
+- To maintain **transparency** about which cases were removed, the following data frame includes all of the reported attacks that had missing information
+
+### 💻 NOTE: The data used to inform these conclusions was cleaned to deal with **outliers in the data**
+
+```{r}
+
+messy_outliers <- reactive({ 
+  
+  messy_dataframe %>%
+    slice_max(affected, n=10)
+  
+  })
+
+renderDT({
+    datatable(messy_outliers(), 
+              rownames = FALSE,
+              options = list(paging = FALSE,
+                             searching = FALSE,
+                             orderClasses = FALSE,
+                             info = FALSE))
+  })
+
+```
+
+***
+
+- Before loading in the data to create these map visualizations, I must first deal with any outliers in the dataset, specifically for the total number of affected individuals. As required by **section 13402(e)(4) of the HITECH Act**, the DHHS must post a list of breaches of unsecured protected health information affecting 500 or more individuals, so the minimum value for the variable **affected** is 500.
+
+- However, as shown in the following dataset of the top 10 health cyber attacks that affected the most amount of individuals, **a single cyber attack can affect as much as 78 million people**. This value is too large to visualize since it would significantly skew the results of the graphs and models, making the next impactful attack seemingly insignificant. You can read more about this attack [HERE](https://www.hhs.gov/guidance/document/anthem-pays-ocr-16-million-record-hipaa-settlement-following-largest-us-health-data-breach)
+
+- Therefore, given that the remainder of the values in the dataset are at around or below 15 million people affected for a single attack, any attack that exceeds this value is removed from the analysis. To maintain **transparency** about which cases were removed, the following data frame the reported attacks with the top 10 most affected individuals. 
+
 
 Comparing Multiple States {data-icon="fa-signal"}
 =====================================  
@@ -1194,34 +1233,39 @@ post_hoc1 <- reactive({
    if(input$variable_choice == "incident"){
     
     games.howell(all_health_breaches_transformed$incident,
-                 all_health_breaches_transformed$affected_transformed)
+                 all_health_breaches_transformed$affected_transformed) %>%
+      filter((upper_limit > 0 & lower_limit > 0) | (upper_limit < 0 & lower_limit < 0))
     
   }
   
   else if(input$variable_choice == "type"){
     
    games.howell(all_health_breaches_transformed$type,
-                 all_health_breaches_transformed$affected_transformed)
+                 all_health_breaches_transformed$affected_transformed) %>%
+      filter((upper_limit > 0 & lower_limit > 0) | (upper_limit < 0 & lower_limit < 0))
     
   }
   
   else if(input$variable_choice == "location"){
     
    games.howell(all_health_breaches_transformed$location,
-                 all_health_breaches_transformed$affected_transformed)
+                 all_health_breaches_transformed$affected_transformed) %>%
+      filter((upper_limit > 0 & lower_limit > 0) | (upper_limit < 0 & lower_limit < 0))
     
   }
   
   else if(input$variable_choice == "business_associate"){
     
     games.howell(all_health_breaches_transformed$business_associate,
-                 all_health_breaches_transformed$affected_transformed)
+                 all_health_breaches_transformed$affected_transformed) %>%
+      filter((upper_limit > 0 & lower_limit > 0) | (upper_limit < 0 & lower_limit < 0))
     
   }
   
   })
 
 renderDT({
+  
     datatable(post_hoc1(), 
               rownames = FALSE,
               options = list(paging = FALSE,
@@ -1232,7 +1276,4 @@ renderDT({
 
 
 ```
-
-Dealing with Data {data-icon="fa-magnifying-glass"}
-===================================== 
 
