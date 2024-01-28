@@ -328,6 +328,30 @@ Use the controls below to explore the DHHS dataset:
 ```{r}
 # From shinyWidgets
 
+pickerInput("select_Location", label = h5("Filter by Digital Location"), 
+    choices = list("Desktop Computer" = "Desktop Computer", 
+                   "Electronic Medical Record" = "Electronic Medical Record", 
+                   "Email" = "Email",
+                   "Laptop" = "Laptop",
+                   "Network Server" = "Network Server",
+                   "Other Electronic Device" = "Other Portable Electronic Device",
+                   "Other" = "Other"), multiple = TRUE, selected = "Desktop Computer", options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
+
+
+pickerInput("select_Type", label = h5("Filter by Target Entity"), 
+    choices = list("Healthcare Provider" = "Healthcare Provider", 
+                   "Health Plan" = "Health Plan", 
+                   "Business Associate" = "Business Associate",
+                   "Healthcare Clearing House" = "Healthcare Clearing House"), multiple = TRUE, selected = "Healthcare Provider", options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
+
+pickerInput("select_Incident", label = h5("Filter by Incident Type"), 
+    choices = list("Hacking/IT Incident" = "Hacking/IT Incident", 
+                   "Improper Disposal" = "Improper Disposal", 
+                   "Loss" = "Loss",
+                   "Other" = "Other",
+                   "Theft" = "Theft",
+                   "Unauthorized Access" = "Unauthorized Access/Disclosure", "Unknown" = "Unknown"), multiple = TRUE, selected = "Unauthorized Access/Disclosure", options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
+
 pickerInput("select_State", label = h5("Filter by Geographical Location"), 
     choices = list("Alabama" = "AL",
                    "Alaska" = "AK",
@@ -383,32 +407,6 @@ pickerInput("select_State", label = h5("Filter by Geographical Location"),
                    "Wyoming" = "WY"), 
     selected = "TX", 
     multiple = TRUE, options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
-
-
-pickerInput("select_Location", label = h5("Filter by Digital Location"), 
-    choices = list("Desktop Computer" = "Desktop Computer", 
-                   "Electronic Medical Record" = "Electronic Medical Record", 
-                   "Email" = "Email",
-                   "Laptop" = "Laptop",
-                   "Network Server" = "Network Server",
-                   "Other Electronic Device" = "Other Portable Electronic Device",
-                   "Other" = "Other"), multiple = TRUE, selected = "Desktop Computer", options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
-
-
-pickerInput("select_Type", label = h5("Filter by Target Entity"), 
-    choices = list("Healthcare Provider" = "Healthcare Provider", 
-                   "Health Plan" = "Health Plan", 
-                   "Business Associate" = "Business Associate",
-                   "Healthcare Clearing House" = "Healthcare Clearing House"), multiple = TRUE, selected = "Healthcare Provider", options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
-
-pickerInput("select_Incident", label = h5("Filter by Incident Type"), 
-    choices = list("Hacking/IT Incident" = "Hacking/IT Incident", 
-                   "Improper Disposal" = "Improper Disposal", 
-                   "Loss" = "Loss",
-                   "Other" = "Other",
-                   "Theft" = "Theft",
-                   "Unauthorized Access" = "Unauthorized Access/Disclosure", "Unknown" = "Unknown"), multiple = TRUE, selected = "Unauthorized Access/Disclosure", options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
-
 
 
 fluidRow(
@@ -600,7 +598,7 @@ renderPlotly({
 
 ***
 
-- This page includes information regarding the spread of cyber-health attacks across the country. There are **TWO maps** on this page, which are shaded based on two distinct values. The current map demonstrates the average number of affected individuals for a given attack in each state. Specifically, the per capita value was calculated by dividing the total number of affected individuals in a given state by the total number of attacks that state has received from 2011 to the present day.
+- This page includes information regarding the spread of cyber-health attacks across the country. There are **TWO maps** on this page, which are shaded based on two distinct values. The current map demonstrates the average number of affected individuals for a given attack in each state. Specifically, the average value was calculated by dividing the total number of affected individuals in a given state by the total number of attacks that state has received from 2011 to the present day.
 
 - When comparing the total number of attacks against the average number of affected individuals, we see that more populous states **(like California, Texas, Florida and New York)** have an overall larger number of individuals affected by health cyber attacks, but when we adjust for the number of attacks that each state receives, we see that states like **Delaware, Tennessee, and Nevada** have more individuals affected in a single attack.
 
@@ -697,7 +695,7 @@ renderDT({
 - Therefore, given that the remainder of the values in the dataset are at around or below 15 million people affected for a single attack, any attack that exceeds this value is removed from the analysis. To maintain **transparency** about which cases were removed, the following data frame the reported attacks with the top 10 most affected individuals. 
 
 
-Comparing Multiple States {data-icon="fa-signal"}
+Frequency of Attacks Over Time {data-icon="fa-signal"}
 =====================================  
 
 Inputs {.sidebar data-width=300}
@@ -881,10 +879,10 @@ renderDT({
 ```
 
 
-Interactive Modeling (ANOVA) {data-icon="fa-table"}
+Interactive Modeling (ANOVA & Welch ANOVA) {data-icon="fa-table"}
 ===================================== 
 
-Row {.sidebar data-width=450}
+Row {.sidebar data-width=550}
 -------------------------------------
 
 #### Interactive Modeling (ANOVA)
@@ -897,7 +895,9 @@ variables2 <- c("incident","type", "location")
 
 radioButtons("variable_choice2", 
             label = h5("Choose a variable to explore:"),
-            choices = list("incidents (Hacking/IT Incident, Theft, Unauthorized Access/Disclosure, Loss, Improper Disposal)" = "incident", "type of target entities (Healthcare Provider, Business Associate, Health Plan, Healthcare Clearing House)" = "type", "digital location of attacks (Network Server, Email, Paper/Films, Other Portable Electronic Device, Desktop Computer, Electronic Medical Record, Laptop)" = "location"), selected = "incident")
+            choices = list("type of incidents" = "incident", 
+                           "type of target entities" = "type", 
+                           "digital location of attacks" = "location"), selected = "incident")
 
 p()
 
@@ -933,13 +933,78 @@ Anova(model2(), type="II")
 
 ```
 
+However, in order to run an ANOVA test, the following assumptions must be met: 
 
-Below, a general [ANOVA test](https://www.qualtrics.com/experience-management/research/anova/) is run to demonstrate that all these variables have an impact on the number of affected individuals for a given cyberattack, with **p<0.01** for every category, as emphasized by the number of asteriks following the Pr(>F) values. 
+* the groups must have the "same" variance (homoscedasticity)
+* each group must be normally distributed
+* the samples must be randomly selected in an independent manner
+
+The first condition can be tested by running Levene's test on the previous variable selected. Since p<0.01 for all of the variables, we see that an ANOVA test alone is not enough evidence to demonstrate that these variables have a significant affect on the number of affected individuals. Other assumptions, such as viewing the normality of the model through a QQPlot, are **demonstrated in the "Assumptions Check" tab to the right**. 
 
 ```{r}
 
-print(summary(aov(affected_transformed ~ incident + type + location, 
-            data = all_health_breaches_transformed)))
+p()
+
+levene_results <- reactive({
+  
+  if(input$variable_choice2 == "incident"){
+    leveneTest(affected_transformed ~ incident, 
+               all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "type"){
+    leveneTest(affected_transformed ~ type, 
+               all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "location"){
+    leveneTest(affected_transformed ~ location, 
+               all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "business_associate"){
+    leveneTest(affected_transformed ~ business_associate, 
+               all_health_breaches_transformed)
+  }
+  
+})
+
+renderPrint({
+  levene_results()
+})
+
+
+```
+
+Instead, by running an ANOVA Welch test which does not rely on the homoscedasticity assumption, we are more certain that these variables have a significant influence on the number of affected individuals. The post-hoc test for an ANOVA Welch test is **Games Howell**, with those values also provided on the right of this page. 
+
+```{r}
+
+p()
+
+model1 <- reactive({
+  
+  if(input$variable_choice2 == "incident"){
+    oneway.test(affected_transformed ~ incident, 
+                     data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "type"){
+   oneway.test(affected_transformed ~ type, 
+                    data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "location"){
+    oneway.test(affected_transformed ~ location, 
+                     data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "business_associate"){
+    oneway.test(affected_transformed ~ business_associate, 
+                     data = all_health_breaches_transformed)
+  }
+  
+})
+
+renderPrint({ 
+   
+model1()
+
+})
 
 ```
 
@@ -1035,6 +1100,42 @@ renderPlot({
 
 ```
 
+### Assumptions Check 
+
+```{r}
+
+model3 <- reactive({
+  
+  if(input$variable_choice2 == "incident"){
+    aov(affected_transformed ~ incident, 
+                     data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "type"){
+   aov(affected_transformed ~ type, 
+                    data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "location"){
+    aov(affected_transformed ~ location, 
+                     data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "business_associate"){
+    aov(affected_transformed ~ business_associate, 
+                     data = all_health_breaches_transformed)
+  }
+  
+})
+
+renderPlot({
+
+  par(mfrow=c(2,2))
+  plot(model3())
+  par(mfrow=c(1,1))
+
+})
+
+```
+
+
 Row {.tabset data-width=200 data-height=300}
 -------------------------------------
 
@@ -1071,166 +1172,13 @@ TukeyHSD(model2())
 
 ```
 
-
-
-Interactive Modeling (Welch ANOVA) {data-icon="fa-table"}
-===================================== 
-
-Row {.sidebar data-width=500}
--------------------------------------
-
-#### Interactive Modeling (Welch ANOVA)
-
-This page expands upon the previous exploration of the different types of cyberattacks and seeks to determine which types of attacks lead to the most amount of affected individuals. Specifically, the DHHS examines **four different categories** of attacks:
-
-* **incidents** (Hacking/IT Incident, Theft, Unauthorized Access/Disclosure, Loss, Improper Disposal)
-* **type** of target entities (Healthcare Provider, Business Associate, Health Plan, Healthcare Clearing House)
-* digital **locations** of attacks (Network Server, Email, Paper/Films, Other Portable Electronic Device, Desktop Computer, Electronic Medical Record, Laptop)
-* presence or absence of **business associates**
-
-Below, an initial [ANOVA test](https://www.qualtrics.com/experience-management/research/anova/) is run, demonstrating that these variables have an impact on the number of affected individuals for a given cyberattack, with **p<0.01** for every category, as emphasized by the number of asteriks following the Pr(>F) values. 
-
-```{r}
-
-print(summary(aov(affected_transformed ~ incident + type + location + business_associate, 
-            data = all_health_breaches_transformed)))
-
-```
-
-However, in order to run an ANOVA test, the following assumptions must be met: 
-
-* the groups must have the "same" variance (homoscedasticity)
-* each group must be normally distributed
-* the samples must be randomly selected in an independent manner
-
-```{r}
-variables <- c("incident","type", "location",  "business_associate")
-
-# From shinyWidgets
-
-radioButtons("variable_choice", 
-            label = h5("Choose a variable to test if it meets these conditions:" ),
-            choices = variables, 
-            variables[1])
-
-p()
-```
-
-The first condition can be tested by running Levene's test. Since p<0.01 for all of the variables, we see that an ANOVA test alone is not enough evidence to demonstrate that these variables have a significant affect on the number of affected individuals. Other assumptions, such as viewing the normality of the model through a QQPlot, are demonstrated in the "Assumptions Check" tab to the right. 
-
-```{r}
-
-p()
-
-levene_results <- reactive({
-  
-  if(input$variable_choice == "incident"){
-    leveneTest(affected_transformed ~ incident, 
-               all_health_breaches_transformed)
-  }
-  else if(input$variable_choice == "type"){
-    leveneTest(affected_transformed ~ type, 
-               all_health_breaches_transformed)
-  }
-  else if(input$variable_choice == "location"){
-    leveneTest(affected_transformed ~ location, 
-               all_health_breaches_transformed)
-  }
-  else if(input$variable_choice == "business_associate"){
-    leveneTest(affected_transformed ~ business_associate, 
-               all_health_breaches_transformed)
-  }
-  
-})
-
-renderPrint({
-  levene_results()
-})
-
-
-```
-
-Instead, by running an ANOVA Welch test which does not rely on the homoscedasticity assumption, we are more certain that these variables have a significant influence on the number of affected individuals. The post-hoc test for an ANOVA Welch test is Games Howell, with those values also provided on this page. 
-
-```{r}
-
-p()
-
-model1 <- reactive({
-  
-  if(input$variable_choice == "incident"){
-    oneway.test(affected_transformed ~ incident, 
-                     data = all_health_breaches_transformed)
-  }
-  else if(input$variable_choice == "type"){
-   oneway.test(affected_transformed ~ type, 
-                    data = all_health_breaches_transformed)
-  }
-  else if(input$variable_choice == "location"){
-    oneway.test(affected_transformed ~ location, 
-                     data = all_health_breaches_transformed)
-  }
-  else if(input$variable_choice == "business_associate"){
-    oneway.test(affected_transformed ~ business_associate, 
-                     data = all_health_breaches_transformed)
-  }
-  
-})
-
-renderPrint({ 
-   
-model1()
-
-})
-
-```
-
-Row {.tabset data-width=500}
--------------------------------------
-
-### Assumptions Check 
-
-```{r}
-
-model3 <- reactive({
-  
-  if(input$variable_choice == "incident"){
-    aov(affected_transformed ~ incident, 
-                     data = all_health_breaches_transformed)
-  }
-  else if(input$variable_choice == "type"){
-   aov(affected_transformed ~ type, 
-                    data = all_health_breaches_transformed)
-  }
-  else if(input$variable_choice == "location"){
-    aov(affected_transformed ~ location, 
-                     data = all_health_breaches_transformed)
-  }
-  else if(input$variable_choice == "business_associate"){
-    aov(affected_transformed ~ business_associate, 
-                     data = all_health_breaches_transformed)
-  }
-  
-})
-
-renderPlot({
-
-  par(mfrow=c(2,2))
-  plot(model3())
-  par(mfrow=c(1,1))
-
-})
-
-```
-
-
 ### Games Howell test
 
 ```{r}
 
 post_hoc1 <- reactive({ 
   
-   if(input$variable_choice == "incident"){
+   if(input$variable_choice2 == "incident"){
     
     games.howell(all_health_breaches_transformed$incident,
                  all_health_breaches_transformed$affected_transformed) %>%
@@ -1238,7 +1186,7 @@ post_hoc1 <- reactive({
     
   }
   
-  else if(input$variable_choice == "type"){
+  else if(input$variable_choice2 == "type"){
     
    games.howell(all_health_breaches_transformed$type,
                  all_health_breaches_transformed$affected_transformed) %>%
@@ -1246,7 +1194,7 @@ post_hoc1 <- reactive({
     
   }
   
-  else if(input$variable_choice == "location"){
+  else if(input$variable_choice2 == "location"){
     
    games.howell(all_health_breaches_transformed$location,
                  all_health_breaches_transformed$affected_transformed) %>%
@@ -1254,7 +1202,7 @@ post_hoc1 <- reactive({
     
   }
   
-  else if(input$variable_choice == "business_associate"){
+  else if(input$variable_choice2 == "business_associate"){
     
     games.howell(all_health_breaches_transformed$business_associate,
                  all_health_breaches_transformed$affected_transformed) %>%
@@ -1276,4 +1224,10 @@ renderDT({
 
 
 ```
+
+
+
+
+
+
 
