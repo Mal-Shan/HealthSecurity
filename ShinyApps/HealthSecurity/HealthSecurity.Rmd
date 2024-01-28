@@ -339,7 +339,7 @@ games.howell <- function(grp, obs) {
 
 ```
 
-Explore DHHS Dataset {data-icon="fa-table"}
+Explore DHHS Dataset {data-icon="fa-database"}
 ===================================== 
 
 Row {.sidebar data-width=500}
@@ -503,7 +503,7 @@ valueBox(monthly_attacks, icon = "fa-laptop-medical", color = "darkred")
 
 ```
 
-### Number of Affected Individuals last month  
+### Number of Affected Individuals this month  
 
 ```{r}
 
@@ -512,7 +512,7 @@ monthly_affected <- all_health_breaches %>%
   mutate(date = ymd(paste(date, sep = " ")))  %>%
   mutate(month = month(date),
          year = year(date)) %>%
-  filter(year == 2023) %>%
+  slice_max(year) %>%
   slice_max(month) %>%
   summarize(affected_this_month = sum(affected, na.rm = TRUE))
 
@@ -845,37 +845,20 @@ renderDT({
 Interactive Modeling (ANOVA) {data-icon="fa-table"}
 ===================================== 
 
-Row {.sidebar data-width=500}
+Row {.sidebar data-width=450}
 -------------------------------------
 
 #### Interactive Modeling (ANOVA)
 
 This page explores the different types of cyberattacks and seeks to determine which types of attacks lead to the most amount of affected individuals. Specifically, the DHHS examines **four different categories** of attacks:
 
-* **incidents** (Hacking/IT Incident, Theft, Unauthorized Access/Disclosure, Loss, Improper Disposal)
-* **type** of target entities (Healthcare Provider, Business Associate, Health Plan, Healthcare Clearing House)
-* digital **locations** of attacks (Network Server, Email, Paper/Films, Other Portable Electronic Device, Desktop Computer, Electronic Medical Record, Laptop)
-* presence or absence of **business associates**
-
-Below, an initial [ANOVA test](https://www.qualtrics.com/experience-management/research/anova/) is run, demonstrating that these variables have an impact on the number of affected individuals for a given cyberattack, with **p<0.01** for every category, as emphasized by the number of asteriks following the Pr(>F) values. 
-
 ```{r}
 
-print(summary(aov(affected_transformed ~ incident + type + location + business_associate, 
-            data = all_health_breaches_transformed)))
-
-```
-
-We can then run a **one-way ANOVA test**, this time focusing on a specific variable, to see which of the sublevels of the variable are significantly different in the median number of affected individuals, as determined by a **post-hoc Tukey HSD test**. 
-
-```{r}
-
-variables2 <- c("incident","type", "location",  "business_associate")
+variables2 <- c("incident","type", "location")
 
 radioButtons("variable_choice2", 
             label = h5("Choose a variable to explore:"),
-            choices = variables2, 
-            variables2[1])
+            choices = list("incidents (Hacking/IT Incident, Theft, Unauthorized Access/Disclosure, Loss, Improper Disposal)" = "incident", "type of target entities (Healthcare Provider, Business Associate, Health Plan, Healthcare Clearing House)" = "type", "digital location of attacks (Network Server, Email, Paper/Films, Other Portable Electronic Device, Desktop Computer, Electronic Medical Record, Laptop)" = "location"), selected = "incident")
 
 p()
 
@@ -893,12 +876,15 @@ model2 <- reactive({
     aov(affected_transformed ~ location, 
                      data = all_health_breaches_transformed)
   }
-  else if(input$variable_choice2 == "business_associate"){
-    aov(affected_transformed ~ business_associate, 
-                     data = all_health_breaches_transformed)
-  }
   
 })
+
+
+```
+
+We can run a **one-way ANOVA test** to focus on a specific variable and see which of the sublevels of the variable are significantly different in the median number of affected individuals, as determined by a **post-hoc Tukey HSD test**. 
+
+```{r}
 
 renderPrint({ 
    
@@ -906,16 +892,23 @@ Anova(model2(), type="II")
 
 })
 
+```
+
+
+Below, a general [ANOVA test](https://www.qualtrics.com/experience-management/research/anova/) is run to demonstrate that all these variables have an impact on the number of affected individuals for a given cyberattack, with **p<0.01** for every category, as emphasized by the number of asteriks following the Pr(>F) values. 
+
+```{r}
+
+print(summary(aov(affected_transformed ~ incident + type + location, 
+            data = all_health_breaches_transformed)))
 
 ```
 
-For example, if you select the **type** variable, we see from the initial exploratory visualizations that there are **differences in the median** number of affected individuals depending on whether the attack is directed against a Healthcare Provider, Business Associate, Health Plan or Healthcare Clearing House. We see that the confidence interval for a **Tukey multiple comparisons of means** test of **Health Plan and Business Associate** ranges from -0.326 to -0.118, while **Healthcare Provider and Business Associate** ranges from -0.277 to -0.121. Since neither range includes zero, this indicates that the difference of means of affected individuals is statistically significant. The confidence intervals for the remaining pairs of means all include zero (as visually represented in the Tukey HSD graph), which indicates that the differences are not statistically significant. 
 
-
-Row {.tabset data-width=500}
+Row {.tabset data-width=700 data-height=600}
 -------------------------------------
 
-### Data Visualization #1
+### Distribution of Affected Individuals
 
 ```{r}
 
@@ -950,99 +943,61 @@ renderPlotly({
       theme(text = element_text(size = 8), 
 				axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
     }
-  
-  else if(input$variable_choice2 == "business_associate"){
 
-  ggboxplot(all_health_breaches_transformed, 
-            x = "business_associate", 
-            y = "affected_transformed", 
-            color = "business_associate") +
-      theme(text = element_text(size = 8), 
-				axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
-  }
   
 })
 
 
 ```
 
-### Data Visualization #2
+### Confidence Interval for Tukey HSD graph
 
 ```{r}
 
-renderPlotly({
-  
-  if(input$variable_choice2 == "incident"){
-
-ggline(all_health_breaches_transformed, 
-       x = "incident", y = "affected_transformed",  
-       add = c("mean_se", "jitter")) +
-  scale_y_continuous(trans='log10') + theme(text = element_text(size = 8), 
-				axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
-    
-  }
-  
-  else if(input$variable_choice2 == "type"){
-    
-ggline(all_health_breaches_transformed, 
-       x = "type", y = "affected_transformed",  
-       add = c("mean_se", "jitter")) +
-  scale_y_continuous(trans='log10') + theme(text = element_text(size = 8), 
-				axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
-    
-    }
-  
-  else if(input$variable_choice2 == "location"){
-
-ggline(all_health_breaches_transformed, 
-       x = "location", y = "affected_transformed",  
-       add = c("mean_se", "jitter")) +
-  scale_y_continuous(trans='log10') + theme(text = element_text(size = 8), 
-				axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
-    
-    }
-  
-  else if(input$variable_choice2 == "business_associate"){
-
-ggline(all_health_breaches_transformed,
-       x = "business_associate", y = "affected_transformed",
-       add = c("mean_se", "jitter")) +
-  scale_y_continuous(trans='log10') + theme(text = element_text(size = 8), 
-				axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
-    
-  }
-  
-})
-
-
-```
-
-### Tukey HSD graph
-
-```{r}
 renderPlot({
   
-par(mar = c(4.1, 13.5, 4.1, 2.1))
-# create confidence interval for each comparison
-plot(TukeyHSD(model2()),
-  las = 2 # rotate x-axis ticks
-)
-
+  if(input$variable_choice2 == "incident"){
+      tuk<-TukeyHSD(model2())
+      psig=as.numeric(apply(tuk$`incident`[,2:3],1,prod)>=0)+1
+      op=par(mar=c(2,25,2,2))
+      plot(tuk,col=psig,yaxt="n")
+      for (j in 1:length(psig)){
+        axis(2,at=j,labels=rownames(tuk$`incident`)[length(psig)-j+1],
+             las=1,cex.axis=1,col.axis=psig[length(psig)-j+1])
+        }
+      par(op)
+    } 
+  
+  else if(input$variable_choice2 == "type"){
+      tuk<-TukeyHSD(model2())
+      psig=as.numeric(apply(tuk$`type`[,2:3],1,prod)>=0)+1
+      op=par(mar=c(2,25,2,2))
+      plot(tuk,col=psig,yaxt="n")
+      for (j in 1:length(psig)){
+        axis(2,at=j,labels=rownames(tuk$`type`)[length(psig)-j+1],
+             las=1,cex.axis=1,col.axis=psig[length(psig)-j+1])
+        }
+      par(op)
+  }
+  
+  else if(input$variable_choice2 == "location"){
+      tuk<-TukeyHSD(model2())
+      psig=as.numeric(apply(tuk$`location`[,2:3],1,prod)>=0)+1
+      op=par(mar=c(2,25,2,2))
+      plot(tuk,col=psig,yaxt="n")
+      for (j in 1:length(psig)){
+        axis(2,at=j,labels=rownames(tuk$`location`)[length(psig)-j+1],
+             las=1,cex.axis=1,col.axis=psig[length(psig)-j+1])
+        }
+      par(op)
+  }
+  
 })
 
 ```
 
-### Tukey HSD test 
-
-```{r}
-
-renderPrint({ 
-  
-TukeyHSD(model2())
-  
-})
-
-```
+Row {.tabset data-width=200 data-height=300}
+-------------------------------------
 
 ### Summary Table
 
@@ -1058,10 +1013,22 @@ dat_type_agg <- reactive({
   
 renderDT({
     datatable(dat_type_agg(),
-              options = list(paging = TRUE,
+              options = list(paging = FALSE,
                              searching = FALSE,
-                             orderClasses = TRUE))
+                             orderClasses = FALSE))
   })
+
+```
+
+### Tukey HSD Test Results  
+
+```{r}
+
+renderPrint({ 
+  
+TukeyHSD(model2())
+  
+})
 
 ```
 
@@ -1265,4 +1232,7 @@ renderDT({
 
 
 ```
+
+Dealing with Data {data-icon="fa-magnifying-glass"}
+===================================== 
 
