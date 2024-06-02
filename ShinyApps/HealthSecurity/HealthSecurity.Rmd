@@ -41,7 +41,7 @@ library(scales)
 
 ```{r global, include = FALSE}
 
-all_health_breaches <- read_csv("https://raw.githubusercontent.com/Mal-Shan/CyberHealthData/main/all_health_breaches2024.csv")
+all_health_breaches <- read_csv("https://raw.githubusercontent.com/Mal-Shan/HealthSecurity/main/all_health_breaches2024.csv")
 all_health_breaches <- all_health_breaches[,-1]
 all_health_breaches <- all_health_breaches[,-9]
 
