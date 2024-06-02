@@ -1,0 +1,1248 @@
+---
+title: "Health Care Security Attacks"
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    theme: simplex
+---
+
+```{r setup, include=FALSE}
+# Libraries
+
+library(flexdashboard)
+library(shinyWidgets)
+library(shiny)
+library(tidyverse)
+library(DT)
+library(reader)
+library(rsconnect)
+library(dplyr)
+library(leaflet)
+library(tigris)
+library(sf)
+library(censusapi)
+library(tidycensus)
+library(lubridate)
+library(reactable)
+library(plotly)
+library(rvest)
+library(highcharter)
+library(dplyr)
+library(viridisLite)
+library(forecast)
+library(flexdashboard)
+library(car)
+library(ggpubr)
+library(scales)
+
+
+```
+
+```{r global, include = FALSE}
+
+all_health_breaches <- read_csv("https://raw.githubusercontent.com/Mal-Shan/CyberHealthData/main/all_health_breaches2024.csv")
+all_health_breaches <- all_health_breaches[,-1]
+all_health_breaches <- all_health_breaches[,-9]
+
+all_health_breaches <- all_health_breaches %>%
+  rename("entity" = "Name of Covered Entity",
+         "state" = "State",
+         "type" = "Covered Entity Type",
+         "affected" = "Individuals Affected",
+         "date" = "Breach Submission Date",
+         "incident" = "Type of Breach",
+         "location" = "Location of Breached Information",
+         "business_associate" = "Business Associate Present") %>%
+  mutate(date = mdy(date)) %>%
+  arrange(desc(date))
+
+#collecting latest 100 cases from HHS 
+url <- "https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf?page=2"
+file <- read_html(url)
+tables <- html_nodes(file, "table")
+new_data <- html_table(tables[[2]], fill = TRUE)
+
+#selecting only the columns from the newly loaded data that match the archived data
+new_data <- new_data %>%
+  rename("entity" = "Name of Covered Entity",
+         "state" = "State",
+         "type" = "Covered Entity Type",
+         "affected" = "Individuals Affected",
+         "date" = "Breach Submission Date",
+         "incident" = "Type of Breach",
+         "location" = "Location of Breached Information",
+         "business_associate" = "Business Associate Present") %>%
+    select(colnames(all_health_breaches)) %>%
+  mutate(date = mdy(date)) %>%
+  arrange(desc(date))
+
+#Check if you need to update data with latest information
+different <- generics::setdiff(new_data, all_health_breaches)
+all_health_breaches <- rbind(different, all_health_breaches)
+
+#creating a copy of the original dataframe with the missing values 
+messy_dataframe <- all_health_breaches
+
+#cleaning the dataframe to remove missing values and exceedingly large cases 
+all_health_breaches <- all_health_breaches %>%   
+  filter(affected < 15000000) %>%
+  mutate(location = stringr::str_remove(location, ',.*'),
+         incident = stringr::str_remove(incident, ',.*'),
+         type = stringr::str_remove(type, ',.*')) %>%
+  drop_na(c(entity, state, type, date, incident, location, business_associate, affected))
+
+#log transforming the data for the interactive modelling page 
+all_health_breaches_transformed <- all_health_breaches
+all_health_breaches_transformed$affected_transformed <- log10(all_health_breaches$affected)
+
+#Creating states chloropleth dataframe (for cleaned dataset)
+states <- states()
+states <- states %>%
+  sf::st_transform('+proj=longlat +datum=WGS84')
+api_key <- "7fafa1056e554ba1b132c71721d21d15a938f866"
+
+total_state_incidents <-  all_health_breaches %>%
+  group_by(state) %>%
+  summarize(total_affected = sum(affected),
+            number_attacks = n(),
+            average_affected = mean(affected))
+
+options(tigris_use_cache = TRUE)
+state_pop <-  getCensus(name="acs/acs5", 
+                        vintage=2020, #was set to 2015 before 
+                        key=api_key, 
+                        vars=c("NAME", "B01003_001E"), 
+                        region="state:*")
+colnames(state_pop) <- c("state_id", "NAME", "population")
+state_pop$state_id <- as.numeric(state_pop$state_id)
+state_off <- data.frame(state.abb, state.name)
+colnames(state_off) <- c("state", "NAME")
+state_pop <- left_join(state_pop, state_off)
+state_pop$state <- ifelse(state_pop$NAME=="District of Columbia", "DC", as.character(state_pop$state))
+state_pop$state <- ifelse(state_pop$NAME=="Puerto Rico", "PR", as.character(state_pop$state))
+cyber_state_pop <- left_join(total_state_incidents, state_pop)
+#cyber_state_pop$per_capita <- round(cyber_state_pop$average_affected/cyber_state_pop$population*100000,2)
+#cyber_state_pop <- filter(cyber_state_pop, !is.na(per_capita))
+states_merged_cyber_pc <- geo_join(states, cyber_state_pop, "STUSPS", "state")
+#pal_cyber <- colorNumeric("Reds", domain=states_merged_cyber_pc$per_capita)
+#states_merged_cyber_pc <- subset(states_merged_cyber_pc, !is.na(per_capita))
+popup_cyber <- paste("<b>", states_merged_cyber_pc$NAME.x, 
+                   "</b><br />Total Individuals Affected: ", states_merged_cyber_pc$total,
+                   "<br />Average Affected: ", 
+                   as.character(states_merged_cyber_pc$average_affected))
+
+
+#Creating states chloropleth dataframe (for missing datset)
+missing_value <-  messy_dataframe %>%
+  group_by(state) %>%
+  summarize(total_affected = sum(affected))
+
+options(tigris_use_cache = TRUE)
+state_pop_2 <-  getCensus(name="acs/acs5", 
+                        vintage=2020, #was set to 2015 before 
+                        key=api_key, 
+                        vars=c("NAME", "B01003_001E"), 
+                        region="state:*")
+colnames(state_pop_2) <- c("state_id", "NAME", "population")
+state_pop_2$state_id <- as.numeric(state_pop_2$state_id)
+state_off_2 <- data.frame(state.abb, state.name)
+colnames(state_off_2) <- c("state", "NAME")
+state_pop_2 <- left_join(state_pop, state_off)
+state_pop_2$state <- ifelse(state_pop_2$NAME=="District of Columbia", "DC", as.character(state_pop$state))
+state_pop_2$state <- ifelse(state_pop_2$NAME=="Puerto Rico", "PR", as.character(state_pop$state))
+cyber_state_pop_2 <- left_join(missing_value, state_pop_2)
+#cyber_state_pop_2$per_capita <- round(cyber_state_pop_2$total_affected/cyber_state_pop_2$population*10000,2) #per 10,000
+#cyber_state_pop_2 <- filter(cyber_state_pop_2, !is.na(per_capita))
+states_merged_cyber_pc_2 <- geo_join(states, cyber_state_pop_2, "STUSPS", "state")
+#pal_cyber_2 <- colorNumeric("Reds", domain=states_merged_cyber_pc_2$per_capita)
+#states_merged_cyber_pc_2 <- subset(states_merged_cyber_pc_2, !is.na(per_capita))
+popup_cyber_2 <- paste("<b>", states_merged_cyber_pc_2$NAME.x, 
+                   "</b><br />Total Individuals Affected: ", states_merged_cyber_pc_2$total,
+                   "<br />Average Affected: ", 
+                   as.character(states_merged_cyber_pc_2$average_affected))
+
+#Creating states chloropleth dataframe (for removal of missing datset)
+remove_missing_value <-  messy_dataframe %>%
+  drop_na(affected) %>%
+  group_by(state) %>%
+  summarize(total_affected = sum(affected))
+
+options(tigris_use_cache = TRUE)
+state_pop_3 <-  getCensus(name="acs/acs5", 
+                        vintage=2020, #was set to 2015 before 
+                        key=api_key, 
+                        vars=c("NAME", "B01003_001E"), 
+                        region="state:*")
+colnames(state_pop_3) <- c("state_id", "NAME", "population")
+state_pop_3$state_id <- as.numeric(state_pop_3$state_id)
+state_off_3 <- data.frame(state.abb, state.name)
+colnames(state_off_3) <- c("state", "NAME")
+state_pop_3 <- left_join(state_pop, state_off)
+state_pop_3$state <- ifelse(state_pop_3$NAME=="District of Columbia", "DC", as.character(state_pop$state))
+state_pop_3$state <- ifelse(state_pop_3$NAME=="Puerto Rico", "PR", as.character(state_pop$state))
+cyber_state_pop_3 <- left_join(remove_missing_value, state_pop_3)
+#cyber_state_pop_3$per_capita <- round(cyber_state_pop_3$total_affected/cyber_state_pop_3$population*10000,2) #per 10,000
+#cyber_state_pop_3 <- filter(cyber_state_pop_3, !is.na(per_capita))
+states_merged_cyber_pc_3 <- geo_join(states, cyber_state_pop_3, "STUSPS", "state")
+#pal_cyber_3 <- colorNumeric("Reds", domain=states_merged_cyber_pc_3$per_capita)
+#states_merged_cyber_pc_3 <- subset(states_merged_cyber_pc_3, !is.na(per_capita))
+popup_cyber_3 <- paste("<b>", states_merged_cyber_pc_3$NAME.x, 
+                   "</b><br />Total Individuals Affected: ", states_merged_cyber_pc_3$total,
+                   "<br />Average Affected: ", 
+                   as.character(states_merged_cyber_pc_3$average_affected))
+
+#counts for entity 
+counts_entity <- all_health_breaches %>%
+  count(entity) %>%
+  rename(Attacks = n)
+
+#function for creating combined attacks dataframe 
+summarize_and_count <- function(df, var_interest, name){
+  
+  summarize_df <- df %>%
+    group_by({{var_interest}}) %>%
+    summarize(total_affected = sum(affected))
+  
+  count_df <- df %>%
+    group_by({{var_interest}}) %>% 
+    count({{var_interest}}) %>%
+    rename(num_category = n)
+    
+ summarize_count <- 
+   full_join(summarize_df, count_df) %>%
+   rename(category = {{var_interest}}) %>%
+   add_column(choice = name)
+
+ return(summarize_count)
+ 
+}
+
+combined_attacks <- rbind(summarize_and_count(all_health_breaches, 
+                                              type, "type"),
+                          summarize_and_count(all_health_breaches, 
+                                              location, "location"),
+                          summarize_and_count(all_health_breaches, 
+                                              incident, "incident"),
+                          summarize_and_count(all_health_breaches, 
+                                              business_associate, "business_associate"))
+
+
+#date of attacks (year)
+total_year_attacks <- all_health_breaches %>%
+  #mutate(date = mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(year = year(date)) %>%
+  add_count(entity) %>%
+  select(state, year, n, affected) %>%
+  group_by(state, year) %>%
+  summarize(total_attacks = sum(n),
+            total_affected = sum(affected)) #updated 1/1/24 to include the total_affected
+
+  
+#frequency of attacks
+freq_attacks <- all_health_breaches %>%
+  #mutate(date = mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  select(-business_associate)
+
+
+#games howell post-hoc test function definition 
+games.howell <- function(grp, obs) {
+  
+  #Create combinations
+  combs <- combn(unique(grp), 2)
+  
+  # Statistics that will be used throughout the calculations:
+  # n = sample size of each group
+  # groups = number of groups in data
+  # Mean = means of each group sample
+  # std = variance of each group sample
+  n <- tapply(obs, grp, length)
+  groups <- length(tapply(obs, grp, length))
+  Mean <- tapply(obs, grp, mean)
+  std <- tapply(obs, grp, var)
+  
+  statistics <- lapply(1:ncol(combs), function(x) {
+    
+    mean.diff <- Mean[combs[2,x]] - Mean[combs[1,x]]
+    
+    #t-values
+    t <- abs(Mean[combs[1,x]] - Mean[combs[2,x]]) / sqrt((std[combs[1,x]] / n[combs[1,x]]) + (std[combs[2,x]] / n[combs[2,x]]))
+    
+    # Degrees of Freedom
+    df <- (std[combs[1,x]] / n[combs[1,x]] + std[combs[2,x]] / n[combs[2,x]])^2 / # Numerator Degrees of Freedom
+            ((std[combs[1,x]] / n[combs[1,x]])^2 / (n[combs[1,x]] - 1) + # Part 1 of Denominator Degrees of Freedom 
+              (std[combs[2,x]] / n[combs[2,x]])^2 / (n[combs[2,x]] - 1)) # Part 2 of Denominator Degrees of Freedom
+    
+    #p-values
+    p <- ptukey(t * sqrt(2), groups, df, lower.tail = FALSE)
+    
+    # Sigma standard error
+    se <- sqrt(0.5 * (std[combs[1,x]] / n[combs[1,x]] + std[combs[2,x]] / n[combs[2,x]]))
+          
+    # Upper Confidence Limit
+    upper.conf <- lapply(1:ncol(combs), function(x) {
+      mean.diff + qtukey(p = 0.95, nmeans = groups, df = df) * se
+    })[[1]]
+    
+    # Lower Confidence Limit
+    lower.conf <- lapply(1:ncol(combs), function(x) {
+      mean.diff - qtukey(p = 0.95, nmeans = groups, df = df) * se
+    })[[1]]
+    
+    # Group Combinations
+    grp.comb <- paste(combs[1,x], ':', combs[2,x])
+    
+    # Collect all statistics into list
+    stats <- list(grp.comb, mean.diff, se, t, df, p, upper.conf, lower.conf)
+  })
+  
+  # Unlist statistics collected earlier
+  stats.unlisted <- lapply(statistics, function(x) {
+    unlist(x)
+  })
+  
+  # Create dataframe from flattened list
+  results <- data.frame(matrix(unlist(stats.unlisted), nrow = length(stats.unlisted), byrow=TRUE))
+  
+  # Select columns set as factors that should be numeric and change with as.numeric
+  results[c(2, 3:ncol(results))] <- round(as.numeric(as.matrix(results[c(2, 3:ncol(results))])), digits = 3)
+  
+  # Rename data frame columns
+  colnames(results) <- c('groups', 'Mean Difference', 'Standard Error', 't', 'df', 'p', 'upper_limit', 'lower_limit')
+
+  return(results)
+}
+
+```
+
+Explore DHHS Dataset {data-icon="fa-database"}
+===================================== 
+
+Row {.sidebar data-width=500}
+-------------------------------------
+
+#### Real-Time Monitoring of Health Security Attacks with R-based Data Visualization Dashboard
+
+Created By: Mridula (Mally) Shan
+
+According to the [US Department of Health and Human Services (DHHS)](https://www.hhs.gov/sites/default/files/2020-hph-cybersecurty-retrospective-tlpwhite.pdf), in almost every month of 2020, more than 1 million people were affected by data breaches at healthcare organizations. This was a 9851% increase from 2019, leading to security exploitations in 560 total healthcare organizations. To foster discussion around these issues, I developed an interactive data dashboard using R that would allow patients and healthcare providers to fully understand the magnitude of such incidents. The data for this dashboard is continuously updated from public domain data provided by [the DHHS](https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf). This project has been presented at the Association for Computing Machiner's 14th International Conference for Computational Biology, Bioinformatics, and Health informatics. Read the [ACM-BCB Conference Paper here ](https://dl.acm.org/doi/10.1145/3584371.3613035).
+
+Use the controls below to explore the DHHS dataset:
+
+```{r}
+# From shinyWidgets
+
+pickerInput("select_Location", label = h5("Filter by Digital Location"), 
+    choices = list("Desktop Computer" = "Desktop Computer", 
+                   "Electronic Medical Record" = "Electronic Medical Record", 
+                   "Email" = "Email",
+                   "Laptop" = "Laptop",
+                   "Network Server" = "Network Server",
+                   "Other Electronic Device" = "Other Portable Electronic Device",
+                   "Other" = "Other"), multiple = TRUE, selected = "Desktop Computer", options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
+
+
+pickerInput("select_Type", label = h5("Filter by Target Entity"), 
+    choices = list("Healthcare Provider" = "Healthcare Provider", 
+                   "Health Plan" = "Health Plan", 
+                   "Business Associate" = "Business Associate",
+                   "Healthcare Clearing House" = "Healthcare Clearing House"), multiple = TRUE, selected = "Healthcare Provider", options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
+
+pickerInput("select_Incident", label = h5("Filter by Incident Type"), 
+    choices = list("Hacking/IT Incident" = "Hacking/IT Incident", 
+                   "Improper Disposal" = "Improper Disposal", 
+                   "Loss" = "Loss",
+                   "Other" = "Other",
+                   "Theft" = "Theft",
+                   "Unauthorized Access" = "Unauthorized Access/Disclosure", "Unknown" = "Unknown"), multiple = TRUE, selected = "Unauthorized Access/Disclosure", options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
+
+pickerInput("select_State", label = h5("Filter by Geographical Location"), 
+    choices = list("Alabama" = "AL",
+                   "Alaska" = "AK",
+                   "Arizona" = "AZ",
+                   "Arkansas" = "AR",
+                   "California" = "CA",
+                   "Colorado" = "CO",
+                   "Connecticut" = "CT",
+                   "Delaware" = "DE",
+                   "District of Columbia" = "DC",
+                   "Florida" = "FL",
+                   "Georgia" = "GA",
+                   "Hawaii" = "HI",
+                   "Idaho" = "ID",
+                   "Illinois" = "IL",
+                   "Indiana" = "IN",
+                   "Iowa" = "IA",
+                   "Kansas" = "KS",
+                   "Kentucky" = "KY",
+                   "Louisiana" = "LA",
+                   "Maine" = "ME",
+                   "Maryland" = "MD",
+                   "Massachusetts" = "MA",
+                   "Michigan" = "MI",
+                   "Minnesota" = "MN",
+                   "Mississippi" = "MS",
+                   "Missouri" = "MO",
+                   "Montana" = "MT",
+                   "Nebraska" = "NE",
+                   "Nevada" = "NV",
+                   "New Hampshire" = "NH",
+                   "New Jersey" = "NJ",
+                   "New Mexico" = "NM",
+                   "New York" = "NY",
+                   "North Carolina" = "NC",
+                   "North Dakota" = "ND",
+                   "Ohio" = "OH",
+                   "Oklahoma" = "OK",
+                   "Oregon" = "OR",
+                   "Pennsylvania" = "PA",
+                   "Puerto Rico" = "PR",
+                   "Rhode Island" = "RI",
+                   "South Carolina" = "SC",
+                   "South Dakota" = "SD",
+                   "Tennessee" = "TN",
+                   "Texas" = "TX",
+                   "Utah" = "UT",
+                   "Vermont" = "VT",
+                   "Virginia" = "VA",
+                   "Washington" = "WA",
+                   "West Virginia" = "WV",
+                   "Wisconsin" = "WI",
+                   "Wyoming" = "WY"), 
+    selected = "TX", 
+    multiple = TRUE, options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
+
+
+fluidRow(
+    align = "left",
+    br(),
+    column(
+      12,
+      splitLayout(cellWidths = c("60%", "60%"),
+                  actionButton(
+                    inputId = "apply",
+                    label = "Apply Changes",
+                    style = "width:125px"
+                  ),
+                  actionButton(
+                    inputId = "revert",
+                    label = "Revert",
+                    style = "width:80px"
+                  )
+      )
+    )
+  ) # fluidRow
+
+p(" ")
+p(" ")
+
+strong("Important Note:")
+
+p("The US Secretary of HHS is only required to report attacks in which 500 or more individuals were affected and so there may be underreporting present in this dataset")
+      
+```
+
+Row
+-------------------------------------
+
+### Number of Affected Individuals this year 
+
+```{r}
+
+yearly_affected <- all_health_breaches %>%
+  #mutate(date = mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(year = year(date)) %>%
+  slice_max(year) %>%
+  summarize(affected_this_year = sum(affected, na.rm = FALSE))
+
+valueBox(yearly_affected, icon = "fa-robot", color = "darkred")
+```
+
+### Number of Attacks this month 
+
+```{r}
+
+monthly_attacks <- all_health_breaches %>%
+  #mutate(date = mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(month = month(date),
+         year = year(date)) %>%
+  slice_max(year) %>%
+  slice_max(month)
+  
+monthly_attacks <- as.numeric(nrow(monthly_attacks))
+
+valueBox(monthly_attacks, icon = "fa-laptop-medical", color = "darkred")
+
+```
+
+### Number of Affected Individuals this month  
+
+```{r}
+
+monthly_affected <- all_health_breaches %>%
+  #mutate(date = mdy(date)) %>%
+  mutate(date = ymd(paste(date, sep = " ")))  %>%
+  mutate(month = month(date),
+         year = year(date)) %>%
+  slice_max(year) %>%
+  slice_max(month) %>%
+  summarize(affected_this_month = sum(affected, na.rm = TRUE))
+
+monthly_affected <- as.numeric(monthly_affected)
+
+valueBox(monthly_affected, icon = "fa-bugs", color = "darkred")
+
+```
+
+
+Column {.tabset data-width=500}
+-------------------------------------
+
+### History of Attacks
+    
+```{r}
+
+  filteredData <- reactiveVal(freq_attacks)
+  
+  observeEvent(input$apply, {
+    filteredData(
+      freq_attacks %>% 
+        filter(state %in% input$select_State, 
+               type %in% input$select_Type, 
+               incident %in% input$select_Incident,
+               location %in% input$select_Location)
+    )
+      
+  })
+  
+  observeEvent(input$revert, {
+    filteredData(
+      freq_attacks
+    )
+      
+  })
+
+  renderDataTable(datatable(filteredData()))
+  
+```
+
+
+Map of Attacks {.storyboard data-icon="fa-map"}
+===================================== 
+
+### 📌 According to this map of the **total affected individuals** from health cyberattacks across the US, more populous states tend to have a larger number of affected individuals
+    
+```{r}
+
+states_merged_cyber_pc$hover <- 
+  with(states_merged_cyber_pc, paste("Total Affected", "<br>", "<br>", population, 
+                                     "<br>", "State Population"))
+
+# give state boundaries a white border
+l <- list(color = toRGB("white"), width = 2)
+
+# specify some map projection/options
+g <- list(
+  scope = 'usa',
+  projection = list(type = 'albers usa'),
+  showlakes = TRUE,
+  lakecolor = toRGB('white'))
+
+
+fig <- plot_geo(states_merged_cyber_pc, locationmode = 'USA-states')
+
+fig <- fig %>% add_trace(
+    z = ~total_affected, locations = ~STUSPS, text = ~hover,
+    color = ~total_affected, colors = 'Reds'
+  )
+
+fig <- fig %>% layout(geo = g,
+                      dragmode=FALSE)
+
+renderPlotly({
+  fig
+})
+
+```
+
+***
+
+- This page includes information regarding the spread of cyber-health attacks across the country. There are **TWO maps** on this page, which are shaded based on two distinct values. The current map demonstrates the total *number of affected* individuals for each state from 2011 to the present day. 
+
+- When comparing the total number of attacks against the average number of affected individuals, we see that more populous states **(like California, Texas, Florida and New York)** have an overall larger number of individuals affected by health cyber attacks, but when we adjust for the number of attacks that each state receives, we see that states like **Delaware, Tennessee, and Nevada** have more individuals affected in a single attack.
+
+- To explore these trends for yourself, you can use your mouse to hover a state and reveal a pop-up with information about the number of affected individuals from each state since 2009, along with 2021 Census data regarding each state's population.
+
+### 📌 This map adjusts for the number of attacks that each state receives to see how many people on average were affected by each attack in a given state
+
+```{r}
+
+states_merged_cyber_pc$hover2 <- 
+  with(states_merged_cyber_pc, paste("Average Affected", "<br>", "<br>", population, 
+                                     "<br>", "State Population"))
+
+fig2 <- plot_geo(states_merged_cyber_pc, locationmode = 'USA-states')
+
+fig2 <- fig2 %>% add_trace(text = ~hover2, z = ~average_affected, locations = ~STUSPS, text = ~hover,
+    color = ~average_affected, colors = 'Reds'
+  )
+
+fig2 <- fig2 %>% layout(geo = g,
+                        dragmode=FALSE)
+
+fig2 <- fig2 %>% colorbar(title = "Average Affected")
+
+renderPlotly({
+  fig2
+})
+
+```
+
+***
+
+- This page includes information regarding the spread of cyber-health attacks across the country. There are **TWO maps** on this page, which are shaded based on two distinct values. The current map demonstrates the average number of affected individuals for a given attack in each state. Specifically, the average value was calculated by dividing the total number of affected individuals in a given state by the total number of attacks that state has received from 2011 to the present day.
+
+- When comparing the total number of attacks against the average number of affected individuals, we see that more populous states **(like California, Texas, Florida and New York)** have an overall larger number of individuals affected by health cyber attacks, but when we adjust for the number of attacks that each state receives, we see that states like **Delaware, Tennessee, and Nevada** have more individuals affected in a single attack.
+
+- To explore these trends for yourself, you can use your mouse to hover a state and reveal a pop-up with information about the number of affected individuals from each state since 2009, along with 2021 Census data regarding each state's population.
+
+### 📌 The following **summary table** organizes the data used to create the previous visualizations, allowing you to numerically compare which states were most impacted
+
+```{r}
+
+states_info <- reactive({ 
+  cyber_state_pop %>%
+    select(NAME, population, total_affected, number_attacks, average_affected)
+  })
+
+renderDT({
+    datatable(states_info(), 
+              rownames = FALSE,
+              options = list(paging = FALSE,
+                             searching = FALSE,
+                             orderClasses = FALSE,
+                             info = FALSE))
+  })
+
+
+```
+
+***
+
+- This is a summary table which provides a breakdown of each state's population, total number of affected residents, average number of affected residents for a given attack, and the total number of attacks that occurred in that state. 
+
+- The **average_affected** values are calculated through the following formula: 
+**total_affected/number_attacks**
+
+- Regarding the latter value, we see again that states with **larger populations** are more likely to have a **larger number of attacks**. In comparison, the states that **on average** have more individuals affected from a given attack do not fall within the top 10 most populous states in the country. 
+
+### 💻 NOTE: The data used to inform these conclusions was cleaned to deal with **missing data**
+
+```{r}
+
+messy_NA <- reactive({ 
+  
+  messy_dataframe[!complete.cases(messy_dataframe), ]
+  
+  })
+
+renderDT({
+    datatable(messy_NA(), 
+              rownames = FALSE,
+              options = list(paging = FALSE,
+                             searching = FALSE,
+                             orderClasses = FALSE,
+                             info = FALSE))
+  })
+
+```
+    
+
+***
+
+- **Data processing** is necessary to ensure that the results I am analyzing are not skewed/biased by missing information and/or outliers in the dataset. Since the information used in the DHHS database is taken from reports filed by the affected entities, we can assume that there will be mistakes in this self-reporting process.
+
+- For example, before loading in the data to create these map visualizations, I must first deal with any missing values for our variables of interest by **removing any cases that do not have**: the name of the affected entity, the number of affected individuals, the state in which the attacks took place, the type of entity that was affected, the date the attack took place, the type of incident, the digital location of the attack, and/or information regarding whether a business associate was present.
+
+- To maintain **transparency** about which cases were removed, the following data frame includes all of the reported attacks that had missing information
+
+### 💻 NOTE: The data used to inform these conclusions was cleaned to deal with **outliers in the data**
+
+```{r}
+
+messy_outliers <- reactive({ 
+  
+  messy_dataframe %>%
+    slice_max(affected, n=10)
+  
+  })
+
+renderDT({
+    datatable(messy_outliers(), 
+              rownames = FALSE,
+              options = list(paging = FALSE,
+                             searching = FALSE,
+                             orderClasses = FALSE,
+                             info = FALSE))
+  })
+
+```
+
+***
+
+- Before loading in the data to create these map visualizations, I must first deal with any outliers in the dataset, specifically for the total number of affected individuals. As required by **section 13402(e)(4) of the HITECH Act**, the DHHS must post a list of breaches of unsecured protected health information affecting 500 or more individuals, so the minimum value for the variable **affected** is 500.
+
+- However, as shown in the following dataset of the top 10 health cyber attacks that affected the most amount of individuals, **a single cyber attack can affect as much as 78 million people**. This value is too large to visualize since it would significantly skew the results of the graphs and models, making the next impactful attack seemingly insignificant. You can read more about this attack [HERE](https://www.hhs.gov/guidance/document/anthem-pays-ocr-16-million-record-hipaa-settlement-following-largest-us-health-data-breach)
+
+- Therefore, given that the remainder of the values in the dataset are at around or below 15 million people affected for a single attack, any attack that exceeds this value is removed from the analysis. To maintain **transparency** about which cases were removed, the following data frame the reported attacks with the top 10 most affected individuals. 
+
+
+Frequency of Attacks Over Time {data-icon="fa-signal"}
+=====================================  
+
+Inputs {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+#### Attacks Over Time
+
+This page allows you to further explore the data from the previous maps and compare trends of attacks overtime and across different states. There are **TWO line graphs**, with the first graph plotting the number of attacks and the second plotting the number of affected individuals, across each selected state from **2009 to the present day**. 
+
+Use the drop down feature below to select your state(s) of interest. You can then use your mouse to hover over the graph and compare the peaks and dips of the line graphs across different states. 
+
+```{r}
+
+pickerInput(inputId = "filter_State2", label = h5("Select state(s) to compare:"), 
+    choices = list("Alabama" = "AL",
+                   "Alaska" = "AK",
+                   "Arizona" = "AZ",
+                   "Arkansas" = "AR",
+                   "California" = "CA",
+                   "Colorado" = "CO",
+                   "Connecticut" = "CT",
+                   "Delaware" = "DE",
+                   "District of Columbia" = "DC",
+                   "Florida" = "FL",
+                   "Georgia" = "GA",
+                   "Hawaii" = "HI",
+                   "Idaho" = "ID",
+                   "Illinois" = "IL",
+                   "Indiana" = "IN",
+                   "Iowa" = "IA",
+                   "Kansas" = "KS",
+                   "Kentucky" = "KY",
+                   "Louisiana" = "LA",
+                   "Maine" = "ME",
+                   "Maryland" = "MD",
+                   "Massachusetts" = "MA",
+                   "Michigan" = "MI",
+                   "Minnesota" = "MN",
+                   "Mississippi" = "MS",
+                   "Missouri" = "MO",
+                   "Montana" = "MT",
+                   "Nebraska" = "NE",
+                   "Nevada" = "NV",
+                   "New Hampshire" = "NH",
+                   "New Jersey" = "NJ",
+                   "New Mexico" = "NM",
+                   "New York" = "NY",
+                   "North Carolina" = "NC",
+                   "North Dakota" = "ND",
+                   "Ohio" = "OH",
+                   "Oklahoma" = "OK",
+                   "Oregon" = "OR",
+                   "Pennsylvania" = "PA",
+                   "Puerto Rico" = "PR",
+                   "Rhode Island" = "RI",
+                   "South Carolina" = "SC",
+                   "South Dakota" = "SD",
+                   "Tennessee" = "TN",
+                   "Texas" = "TX",
+                   "Utah" = "UT",
+                   "Vermont" = "VT",
+                   "Virginia" = "VA",
+                   "Washington" = "WA",
+                   "West Virginia" = "WV",
+                   "Wisconsin" = "WI",
+                   "Wyoming" = "WY"),
+    selected = "AL", 
+    multiple = TRUE, 
+    options = list(`actions-box` = TRUE, `deselect-all-text` = "Deselect All", `select-all-text` = "Select All", `none-selected-text` = "Please Make a Selection"))
+
+p(" ")
+
+strong("Important Note:")
+
+p("Since the data for these graphs are being continuously updated and the year is still ongoing, the specific number of attacks/affected individuals for the year 2024 are not definitive and will change.")
+
+```
+
+
+Row {.tabset data-width=700 data-height=600}
+-------------------------------------
+
+### Number of Attacks overtime
+
+```{r}
+  
+multiple_select <- reactive({
+    total_year_attacks  %>%
+      filter(state %in% input$filter_State2)
+  })
+  
+renderPlotly({
+  
+  ggplot(data = multiple_select(), 
+         mapping = aes(x = year, y = total_attacks, color = state)) +
+    geom_line(lwd = 0.5,    # Line width
+             linetype = 1,
+             size = 3) +
+    theme(panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          panel.background = element_blank(), 
+          plot.background = element_rect(fill = "#f5f5f5"),
+          axis.line = element_line(colour = "black")) + 
+    scale_x_continuous(breaks = round(seq(min(multiple_select()$year), 
+                                          max(multiple_select()$year), 
+                                          by = 1), 1)) + 
+    labs(y = "Number of Attacks", x = "Year") +
+    theme(plot.title = element_text(size = 15, face = "bold"),
+          axis.text = element_text(size = 15),
+          axis.text.x = element_text(face = "bold",
+                                     angle = 45,
+                                     vjust = 1,
+                                     hjust = 1),
+          axis.text.y = element_text(face = "bold"))
+
+  })
+
+```
+
+### Number of Affected Individuals
+
+```{r}
+  
+multiple_select <- reactive({
+    total_year_attacks  %>%
+      filter(state %in% input$filter_State2)
+  })
+  
+renderPlotly({
+  
+  ggplot(data = multiple_select(), 
+         mapping = aes(x = year, y = total_affected, color = state)) +
+    geom_line(lwd = 0.5,    # Line width
+             linetype = 1,
+             size = 3) +
+    theme(panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          panel.background = element_blank(), 
+          plot.background = element_rect(fill = "#f5f5f5"),
+          axis.line = element_line(colour = "black")) + 
+    scale_x_continuous(breaks = round(seq(min(multiple_select()$year), 
+                                          max(multiple_select()$year), 
+                                          by = 1), 1)) + 
+    labs(y = "Number of Affected Individuals", x = "Year") +
+    theme(plot.title = element_text(size = 15, face = "bold"),
+          axis.text = element_text(size = 15),
+          axis.text.x = element_text(face = "bold",
+                                     angle = 45,
+                                     vjust = 1,
+                                     hjust = 1),
+          axis.text.y = element_text(face = "bold")) + 
+    scale_y_continuous(labels = label_comma())
+
+  })
+
+```
+
+Row {.tabset data-width=300 data-height=400}
+-------------------------------------
+
+### Summary Table
+    
+```{r}
+
+multiple_select_desc <- reactive({ 
+    multiple_select() %>%
+    arrange(desc(year)) %>%
+    select(state, year, total_affected, total_attacks)
+
+  })
+
+renderDT({
+    datatable(multiple_select_desc(), 
+              rownames = FALSE,
+              options = list(paging = FALSE,
+                             searching = FALSE,
+                             orderClasses = FALSE,
+                             info = FALSE))
+  })
+
+```
+
+
+Interactive Modeling (ANOVA & Welch ANOVA) {data-icon="fa-table"}
+===================================== 
+
+Row {.sidebar data-width=550}
+-------------------------------------
+
+#### Interactive Modeling (ANOVA)
+
+This page explores the different types of cyberattacks and seeks to determine which types of attacks lead to the most amount of affected individuals. Specifically, the DHHS examines **four different categories** of attacks:
+
+```{r}
+
+variables2 <- c("incident","type", "location")
+
+radioButtons("variable_choice2", 
+            label = h5("Choose a variable to explore:"),
+            choices = list("type of incidents" = "incident", 
+                           "type of target entities" = "type", 
+                           "digital location of attacks" = "location"), selected = "incident")
+
+p()
+
+model2 <- reactive({
+  
+  if(input$variable_choice2 == "incident"){
+    aov(affected_transformed ~ incident, 
+                     data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "type"){
+   aov(affected_transformed ~ type, 
+                    data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "location"){
+    aov(affected_transformed ~ location, 
+                     data = all_health_breaches_transformed)
+  }
+  
+})
+
+
+```
+
+We can run a **one-way ANOVA test** to focus on a specific variable and see which of the sublevels of the variable are significantly different in the median number of affected individuals, as determined by a **post-hoc Tukey HSD test**. 
+
+```{r}
+
+renderPrint({ 
+   
+Anova(model2(), type="II")
+
+})
+
+```
+
+However, in order to run an ANOVA test, the following assumptions must be met: 
+
+* the groups must have the "same" variance (homoscedasticity)
+* each group must be normally distributed
+* the samples must be randomly selected in an independent manner
+
+The first condition can be tested by running Levene's test on the previous variable selected. Since p<0.01 for all of the variables, we see that an ANOVA test alone is not enough evidence to demonstrate that these variables have a significant affect on the number of affected individuals. Other assumptions, such as viewing the normality of the model through a QQPlot, are **demonstrated in the "Assumptions Check" tab to the right**. 
+
+```{r}
+
+p()
+
+levene_results <- reactive({
+  
+  if(input$variable_choice2 == "incident"){
+    leveneTest(affected_transformed ~ incident, 
+               all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "type"){
+    leveneTest(affected_transformed ~ type, 
+               all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "location"){
+    leveneTest(affected_transformed ~ location, 
+               all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "business_associate"){
+    leveneTest(affected_transformed ~ business_associate, 
+               all_health_breaches_transformed)
+  }
+  
+})
+
+renderPrint({
+  levene_results()
+})
+
+
+```
+
+Instead, by running an ANOVA Welch test which does not rely on the homoscedasticity assumption, we are more certain that these variables have a significant influence on the number of affected individuals. The post-hoc test for an ANOVA Welch test is **Games Howell**, with those values also provided on the right of this page. 
+
+```{r}
+
+p()
+
+model1 <- reactive({
+  
+  if(input$variable_choice2 == "incident"){
+    oneway.test(affected_transformed ~ incident, 
+                     data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "type"){
+   oneway.test(affected_transformed ~ type, 
+                    data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "location"){
+    oneway.test(affected_transformed ~ location, 
+                     data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "business_associate"){
+    oneway.test(affected_transformed ~ business_associate, 
+                     data = all_health_breaches_transformed)
+  }
+  
+})
+
+renderPrint({ 
+   
+model1()
+
+})
+
+```
+
+
+Row {.tabset data-width=700 data-height=600}
+-------------------------------------
+
+### Distribution of Affected Individuals
+
+```{r}
+
+renderPlotly({
+  
+  if(input$variable_choice2 == "incident"){
+
+  ggboxplot(all_health_breaches, 
+            x = "incident", 
+            y = "affected", 
+            color = "incident") +
+      theme(text = element_text(size = 8), 
+				axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) + 
+      labs(y = "(log-transformed) number affected") +
+  scale_y_continuous(trans = "log10", breaks = trans_breaks("log10", function(x) 10 ^ (x)),
+                     labels = trans_format("log10", math_format(10 ^ .x))) 
+  }
+  
+  else if(input$variable_choice2 == "type"){
+    
+    ggboxplot(all_health_breaches, 
+            x = "type", 
+            y = "affected", 
+            color = "type") +
+      theme(text = element_text(size = 8), 
+				axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+      labs(y = "(log-transformed) number affected") +
+  scale_y_continuous(trans = "log10", breaks = trans_breaks("log10", function(x) 10 ^ (x)),
+                     labels = trans_format("log10", math_format(10 ^ .x)))
+    }
+  
+  else if(input$variable_choice2 == "location"){
+
+  ggboxplot(all_health_breaches, 
+            x = "location", 
+            y = "affected", 
+            color = "location") +
+      theme(text = element_text(size = 8), 
+				axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+      labs(y = "(log-transformed) number affected") +
+  scale_y_continuous(trans = "log10", breaks = trans_breaks("log10", function(x) 10 ^ (x)),
+                     labels = trans_format("log10", math_format(10 ^ .x)))
+    }
+
+  
+})
+
+
+```
+
+### Confidence Interval for Tukey HSD graph
+
+```{r}
+
+renderPlot({
+  
+  if(input$variable_choice2 == "incident"){
+      tuk<-TukeyHSD(model2())
+      psig=as.numeric(apply(tuk$`incident`[,2:3],1,prod)>=0)+1
+      op=par(mar=c(2,25,2,2))
+      plot(tuk,col=psig,yaxt="n")
+      for (j in 1:length(psig)){
+        axis(2,at=j,labels=rownames(tuk$`incident`)[length(psig)-j+1],
+             las=1,cex.axis=1,col.axis=psig[length(psig)-j+1])
+        }
+      par(op)
+    } 
+  
+  else if(input$variable_choice2 == "type"){
+      tuk<-TukeyHSD(model2())
+      psig=as.numeric(apply(tuk$`type`[,2:3],1,prod)>=0)+1
+      op=par(mar=c(2,25,2,2))
+      plot(tuk,col=psig,yaxt="n")
+      for (j in 1:length(psig)){
+        axis(2,at=j,labels=rownames(tuk$`type`)[length(psig)-j+1],
+             las=1,cex.axis=1,col.axis=psig[length(psig)-j+1])
+        }
+      par(op)
+  }
+  
+  else if(input$variable_choice2 == "location"){
+      tuk<-TukeyHSD(model2())
+      psig=as.numeric(apply(tuk$`location`[,2:3],1,prod)>=0)+1
+      op=par(mar=c(2,25,2,2))
+      plot(tuk,col=psig,yaxt="n")
+      for (j in 1:length(psig)){
+        axis(2,at=j,labels=rownames(tuk$`location`)[length(psig)-j+1],
+             las=1,cex.axis=1,col.axis=psig[length(psig)-j+1])
+        }
+      par(op)
+  }
+  
+})
+
+```
+
+### Assumptions Check 
+
+```{r}
+
+model3 <- reactive({
+  
+  if(input$variable_choice2 == "incident"){
+    aov(affected_transformed ~ incident, 
+                     data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "type"){
+   aov(affected_transformed ~ type, 
+                    data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "location"){
+    aov(affected_transformed ~ location, 
+                     data = all_health_breaches_transformed)
+  }
+  else if(input$variable_choice2 == "business_associate"){
+    aov(affected_transformed ~ business_associate, 
+                     data = all_health_breaches_transformed)
+  }
+  
+})
+
+renderPlot({
+
+  par(mfrow=c(2,2))
+  plot(model3())
+  par(mfrow=c(1,1))
+
+})
+
+```
+
+
+Row {.tabset data-width=200 data-height=300}
+-------------------------------------
+
+### Summary Table
+
+```{r}
+
+dat_type_agg <- reactive({
+  
+  combined_attacks %>%
+    filter(choice == input$variable_choice2) %>%
+    select(category, num_category, total_affected)
+  
+  })
+  
+renderDT({
+    datatable(dat_type_agg(),
+              options = list(paging = FALSE,
+                             searching = FALSE,
+                             orderClasses = FALSE))
+  })
+
+```
+
+### Tukey HSD Test Results  
+
+```{r}
+
+renderPrint({ 
+  
+TukeyHSD(model2())
+  
+})
+
+```
+
+### Games Howell test
+
+```{r}
+
+post_hoc1 <- reactive({ 
+  
+   if(input$variable_choice2 == "incident"){
+    
+    games.howell(all_health_breaches_transformed$incident,
+                 all_health_breaches_transformed$affected_transformed) %>%
+      filter((upper_limit > 0 & lower_limit > 0) | (upper_limit < 0 & lower_limit < 0))
+    
+  }
+  
+  else if(input$variable_choice2 == "type"){
+    
+   games.howell(all_health_breaches_transformed$type,
+                 all_health_breaches_transformed$affected_transformed) %>%
+      filter((upper_limit > 0 & lower_limit > 0) | (upper_limit < 0 & lower_limit < 0))
+    
+  }
+  
+  else if(input$variable_choice2 == "location"){
+    
+   games.howell(all_health_breaches_transformed$location,
+                 all_health_breaches_transformed$affected_transformed) %>%
+      filter((upper_limit > 0 & lower_limit > 0) | (upper_limit < 0 & lower_limit < 0))
+    
+  }
+  
+  else if(input$variable_choice2 == "business_associate"){
+    
+    games.howell(all_health_breaches_transformed$business_associate,
+                 all_health_breaches_transformed$affected_transformed) %>%
+      filter((upper_limit > 0 & lower_limit > 0) | (upper_limit < 0 & lower_limit < 0))
+    
+  }
+  
+  })
+
+renderDT({
+  
+    datatable(post_hoc1(), 
+              rownames = FALSE,
+              options = list(paging = FALSE,
+                             searching = FALSE,
+                             orderClasses = FALSE,
+                             info = FALSE))
+  })
+
+
+```
+
+
+
+
+
+
+
